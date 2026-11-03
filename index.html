@@ -217,7 +217,7 @@ tr.offline td.wname::before{color:var(--red)}
       <div class="cell"><div class="k">1h avg</div><div class="v" data-f="hr1h"></div></div>
       <div class="cell"><div class="k">24h avg</div><div class="v" data-f="hr1d"></div></div>
       <div class="cell"><div class="k">Rigs online</div><div class="v c" data-f="workers"></div></div>
-      <div class="cell"><div class="k">Best share</div><div class="v" data-f="best"></div></div>
+      <div class="cell"><div class="k">Best (round)</div><div class="v" data-f="best"></div></div>
       <div class="cell"><div class="k">Best ever</div><div class="v c" data-f="bestever"></div></div>
       <div class="cell"><div class="k">Payout</div><div class="v" data-f="payout"></div></div>
     </div>
@@ -296,7 +296,8 @@ function renderPool(key, p, now){
   f("reward").innerHTML = rewardHTML(key, p.reward);
   f("hr1h").textContent=hs(hr["1h"]); f("hr1d").textContent=hs(hr["1d"]);
   f("workers").textContent=num((p.workers||[]).filter(w=>isOn(w,now)).length);
-  f("best").textContent=sh(pool.bestshare); f("bestever").textContent=sh(pool.bestever);
+  if(pool.bestshare>0) f("best").textContent=sh(pool.bestshare);
+  else f("best").innerHTML='— <span style="font-size:11px;color:var(--dim);font-weight:400">no shares this round</span>'; f("bestever").textContent=sh(pool.bestever);
   f("payout").textContent=p.payout||"—";
   f("height").textContent=num(node.blocks);
   f("diff").textContent=sh(node.difficulty);

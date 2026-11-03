@@ -189,7 +189,7 @@ def collect(key, cfg, history):
             "runtime": ps.get("runtime"), "lastupdate": ps.get("lastupdate")}
 
     # --- users / workers ---
-    workers, payout, bestever = [], None, 0
+    workers, payout, bestever, bestround = [], None, 0, 0
     udir = cfg["pooldir"] / "users"
     if udir.is_dir():
         for uf in sorted(udir.iterdir()):
@@ -199,13 +199,15 @@ def collect(key, cfg, history):
                 continue
             payout = payout or mask(uf.name)
             bestever = max(bestever, u.get("bestever") or 0)
+            bestround = max(bestround, u.get("bestshare") or 0)
             for w in u.get("worker", []):
                 workers.append({"name": rig_name(w.get("workername", "")),
                                 "hashrate1m": hr(w.get("hashrate1m")), "hashrate5m": hr(w.get("hashrate5m")),
                                 "hashrate1h": hr(w.get("hashrate1hr")), "hashrate1d": hr(w.get("hashrate1d")),
                                 "lastshare": w.get("lastshare"), "bestshare": w.get("bestshare"),
                                 "bestever": w.get("bestever")})
-    pool["bestever"] = max(bestever, pool.get("bestshare") or 0) or None
+    pool["bestshare"] = max(pool.get("bestshare") or 0, bestround) or 0
+    pool["bestever"] = max(bestever, pool["bestshare"]) or None
     workers.sort(key=lambda w: (-(w["hashrate5m"] or 0)))
     blocks = block_history(key, cfg, history)
     # only publish rigs that submitted a share in the last 10 minutes
