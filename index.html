@@ -200,7 +200,8 @@ tr.offline td.wname::before{color:var(--red)}
 .sscroll{max-height:440px;overflow-y:auto;scrollbar-color:var(--cyan) #0b0e17;scrollbar-width:thin}
 .sscroll thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
 table.st td{font-size:12.5px;padding:6px 8px}
-table.st .s-time{color:var(--dim)} table.st .s-rig{color:var(--grn);text-align:left}
+table.st .s-time{color:var(--dim)} table.st .s-rig{color:var(--grn)}
+table.st th:nth-child(3), table.st td.s-rig{text-align:center}
 table.st .s-diff{color:#fff;font-weight:600} table.st .s-dev{color:var(--dim);text-align:right}
 .lk{color:#7fdcff} .lk.hi{color:var(--yel);font-weight:700} .lk.mega{color:#ff9d1c;font-weight:800;text-shadow:0 0 8px #ff9d1c88}
 tr.fresh td{animation:fresh 2.2s ease-out}
@@ -262,7 +263,7 @@ table.st .s-meta{display:none}
   table.st thead{display:none} table.st, table.st tbody{display:block}
   table.st tr{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"rig diff" "meta meta";gap:3px 10px;padding:9px 2px;border-bottom:1px solid #121829}
   table.st td{padding:0;border:0;white-space:nowrap;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis}
-  table.st .s-coin{display:none} table.st .s-rig{grid-area:rig;font-weight:600}
+  table.st .s-coin{display:none} table.st td.s-rig{grid-area:rig;font-weight:600;text-align:left}
   table.st .s-diff{grid-area:diff;text-align:right}
   table.st .s-time{display:none}
   table.st .s-luck,table.st .s-net,table.st .s-dev{display:none}
