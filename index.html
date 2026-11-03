@@ -178,6 +178,20 @@ tr.offline td.wname::before{color:var(--red)}
 .toast.show{transform:translate(-50%,0);opacity:1}
 .toast b{color:var(--cyan)}
 
+.alertwrap{position:relative}
+.apanel{position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:300px;background:#0b0e17f7;border:1px solid #ff2bd666;padding:10px 12px;box-shadow:0 10px 40px #000a,0 0 24px #ff2bd622}
+.apanel .ah{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);margin:2px 0 8px}
+.arow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);cursor:pointer}
+.arow b{display:block;font-size:13px;color:#fff;font-weight:600}
+.arow small{display:block;font-size:10.5px;color:var(--dim);margin-top:2px}
+.arow input{display:none}
+.arow .sw{flex:none;width:34px;height:18px;border-radius:10px;background:#1c2336;position:relative;transition:.2s}
+.arow .sw::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#6f7ea3;transition:.2s}
+.arow input:checked + .sw{background:#39ff8844}
+.arow input:checked + .sw::after{left:18px;background:var(--grn);box-shadow:0 0 8px var(--grn)}
+.apanel.busy{opacity:.6;pointer-events:none}
+@media (max-width:520px){.apanel{left:0;right:auto;width:min(300px,90vw)}}
+
 @media (max-width:980px){.pools{grid-template-columns:1fr}.totals{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,1fr)}.status{align-items:flex-start}.hide-sm{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
@@ -191,7 +205,15 @@ tr.offline td.wname::before{color:var(--red)}
       <div class="sub">home-grown hashrate · <b>BTC</b> + <b>BCH</b> · solo or nothing</div>
     </div>
     <div class="status">
-      <button class="bell" id="bell" hidden><span>🔔 Block alerts</span><span class="sw"></span></button>
+      <div class="alertwrap" id="alertwrap" hidden>
+        <button class="bell" id="bell"><span id="bellTxt">🔔 Alerts</span><span class="sw"></span></button>
+        <div class="apanel" id="apanel" hidden>
+          <div class="ah">Push alerts · this device</div>
+          <label class="arow"><span><b>⛏️ Block found</b><small>coin, block #, rig, diff, effort, reward</small></span><input type="checkbox" data-pref="block"><i class="sw"></i></label>
+          <label class="arow"><span><b>🎯 New best diff</b><small>a rig beats its best-ever share</small></span><input type="checkbox" data-pref="bestdiff"><i class="sw"></i></label>
+          <label class="arow"><span><b>📴 Rig offline</b><small>no shares for 10 min · and back online</small></span><input type="checkbox" data-pref="offline"><i class="sw"></i></label>
+        </div>
+      </div>
       <div id="live" class="pill"><span class="dot"></span><span id="liveTxt">CONNECTING…</span></div>
       <div class="muted" id="updated">—</div>
     </div>
@@ -439,48 +461,65 @@ async function load(){
 load(); setInterval(load, REFRESH_MS);
 loadPrices(); setInterval(loadPrices, 5*60_000);
 
-/* ===== BLOCK ALERTS (web push via Cloudflare Worker) ===== */
+/* ===== PUSH ALERTS (web push via Cloudflare Worker) ===== */
 const PUSH_API = "";   // e.g. "https://mikeyrocks-solo-push.<you>.workers.dev" — set after deploying the Worker
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
 const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const pushOK = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const PREF_KEYS = ["block","bestdiff","offline"];
 let swReg = null, toastT;
 function toast(html, ms=6000){ const t=$("#toast"); t.innerHTML=html; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"), ms); }
-function setBell(on){ const b=$("#bell"); b.classList.toggle("on", !!on); b.querySelector("span").textContent = on ? "🔔 Alerts on" : "🔔 Block alerts"; }
 const b64uToU8 = s => Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"===".slice((s.length+3)%4)), c=>c.charCodeAt(0));
+function loadPrefs(){ try{ return JSON.parse(localStorage.getItem("alertPrefs"))||{}; }catch(e){ return {}; } }
+function savePrefs(p){ try{ localStorage.setItem("alertPrefs", JSON.stringify(p)); }catch(e){} }
+function showPrefs(p){
+  document.querySelectorAll("[data-pref]").forEach(i=>i.checked=!!p[i.dataset.pref]);
+  const n = PREF_KEYS.filter(k=>p[k]).length;
+  $("#bell").classList.toggle("on", n>0); $("#bellTxt").textContent = n ? `🔔 Alerts · ${n} on` : "🔔 Alerts";
+}
 
 async function initAlerts(){
   if(!PUSH_API) return;
-  const bell=$("#bell"); bell.hidden=false;
-  if("serviceWorker" in navigator){
-    try{ swReg = await navigator.serviceWorker.register("sw.js"); }catch(e){}
-  }
-  if(pushOK && swReg){ const sub = await swReg.pushManager.getSubscription().catch(()=>null); setBell(!!sub && Notification.permission==="granted"); }
-  bell.addEventListener("click", toggleAlerts);
+  $("#alertwrap").hidden=false;
+  if("serviceWorker" in navigator){ try{ swReg = await navigator.serviceWorker.register("sw.js"); }catch(e){} }
+  let prefs = loadPrefs();
+  if(pushOK && swReg){
+    const sub = await swReg.pushManager.getSubscription().catch(()=>null);
+    if(!sub || Notification.permission!=="granted") prefs = {};
+  } else prefs = {};
+  showPrefs(prefs);
+  $("#bell").addEventListener("click", e=>{ e.stopPropagation(); $("#apanel").hidden = !$("#apanel").hidden; });
+  document.addEventListener("click", e=>{ if(!$("#alertwrap").contains(e.target)) $("#apanel").hidden=true; });
+  document.querySelectorAll("[data-pref]").forEach(i=>i.addEventListener("change", ()=>changePref(i)));
 }
 
-async function toggleAlerts(){
-  const bell=$("#bell");
+async function changePref(input){
+  const before = loadPrefs(), want = {...before, [input.dataset.pref]: input.checked};
   if(!pushOK || !swReg){
-    if(isIOS && !standalone) return toast(`<b>Add to Home Screen first.</b><br>In Safari tap <b>Share ⬆</b> → <b>Add to Home Screen</b>, open <b>MikeySolo</b> from your home screen, then tap the bell. (iOS 16.4+)`, 12000);
+    input.checked=false;
+    if(isIOS && !standalone) return toast(`<b>Add to Home Screen first.</b><br>In Safari tap <b>Share ⬆</b> → <b>Add to Home Screen</b>, open <b>MikeySolo</b> from your home screen, then turn alerts on. (iOS 16.4+)`, 12000);
     return toast("This browser doesn't support push alerts. Try Safari (iPhone, from the home screen), Chrome, Edge or Firefox.");
   }
-  bell.disabled=true;
+  const panel=$("#apanel"); panel.classList.add("busy");
   try{
-    const existing = await swReg.pushManager.getSubscription();
-    if(existing && bell.classList.contains("on")){
-      await fetch(PUSH_API+"/unsubscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:existing.endpoint})}).catch(()=>{});
-      await existing.unsubscribe(); setBell(false); toast("Block alerts <b>off</b> for this device."); return;
+    let sub = await swReg.pushManager.getSubscription();
+    if(!PREF_KEYS.some(k=>want[k])){                       // everything off -> unsubscribe
+      if(sub){ await fetch(PUSH_API+"/unsubscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{}); await sub.unsubscribe(); }
+      savePrefs({}); showPrefs({}); toast("All alerts <b>off</b> for this device."); return;
     }
-    const perm = await Notification.requestPermission();
-    if(perm!=="granted"){ toast(perm==="denied" ? "Notifications are blocked for this site. Turn them on in your device / browser settings, then try again." : "Alerts not enabled."); return; }
-    const {publicKey} = await (await fetch(PUSH_API+"/vapid")).json();
-    const sub = existing || await swReg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64uToU8(publicKey)});
-    const r = await fetch(PUSH_API+"/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscription:sub.toJSON()})});
-    if(!r.ok) throw new Error("subscribe "+r.status);
-    setBell(true); toast("<b>Alerts on.</b> You'll get <b>⛏️ BLOCK FOUND!</b> on this device with the rig, diff and reward.");
-  }catch(e){ toast("Couldn't change alerts: "+esc(e.message||e)); }
-  finally{ bell.disabled=false; }
+    if(Notification.permission!=="granted"){
+      const perm = await Notification.requestPermission();
+      if(perm!=="granted") throw new Error(perm==="denied" ? "notifications are blocked for this site, turn them on in your device / browser settings" : "permission not given");
+    }
+    if(!sub){ const {publicKey} = await (await fetch(PUSH_API+"/vapid")).json();
+              sub = await swReg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64uToU8(publicKey)}); }
+    const r = await fetch(PUSH_API+"/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscription:sub.toJSON(), prefs:want})});
+    if(!r.ok) throw new Error("server said "+r.status);
+    savePrefs(want); showPrefs(want);
+    const names={block:"⛏️ Block found",bestdiff:"🎯 New best diff",offline:"📴 Rig offline"};
+    toast(`<b>${names[input.dataset.pref]}</b> alerts ${input.checked?"<b>on</b>":"off"} for this device.`);
+  }catch(e){ showPrefs(before); toast("Couldn't change alerts: "+esc(e.message||e)); }
+  finally{ panel.classList.remove("busy"); }
 }
 initAlerts();
 

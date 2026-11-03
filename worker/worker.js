@@ -7,9 +7,10 @@
 //
 // Routes:
 //   GET  /vapid                      -> { publicKey }   (keypair is created on first use)
-//   POST /subscribe   {subscription} -> 201
+//   POST /subscribe   {subscription, prefs:{block,bestdiff,offline}} -> 201  (also used to change prefs)
 //   POST /unsubscribe {endpoint}     -> 200
-//   POST /notify  (Bearer NOTIFY_TOKEN) {title, body, url?, tag?} -> { sent, removed, failed }
+//   POST /notify  (Bearer NOTIFY_TOKEN) {type, title, body, url?, tag?} -> { sent, skipped, removed, failed }
+//        type: "block" | "bestdiff" | "offline" | "test" — each device only gets the types it turned on
 //   GET  /health                     -> { subscribers }
 //
 // Web Push (RFC 8030/8291/8292) is implemented with WebCrypto only; no dependencies.
@@ -23,6 +24,8 @@ function cors(env, extra = {}) {
   return { "Access-Control-Allow-Origin": env.ALLOW_ORIGIN || "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
            "Access-Control-Allow-Headers": "Content-Type,Authorization", "Access-Control-Max-Age": "86400", ...extra };
 }
+const TYPES = ["block", "bestdiff", "offline"];
+const cleanPrefs = p => Object.fromEntries(TYPES.map(t => [t, p ? !!p[t] : t === "block"]));
 const json = (env, data, status = 200) => new Response(JSON.stringify(data), { status, headers: cors(env, { "Content-Type": "application/json" }) });
 
 // ---------- VAPID keys (generated once, kept in KV) ----------
@@ -98,9 +101,9 @@ export default {
       }
 
       if (req.method === "POST" && url.pathname === "/subscribe") {
-        const { subscription: s } = await req.json();
+        const { subscription: s, prefs } = await req.json();
         if (!s?.endpoint?.startsWith("https://") || !s.keys?.p256dh || !s.keys?.auth) return json(env, { error: "bad subscription" }, 400);
-        await env.SUBS.put(await subKey(s.endpoint), JSON.stringify({ endpoint: s.endpoint, keys: s.keys, added: Date.now() }));
+        await env.SUBS.put(await subKey(s.endpoint), JSON.stringify({ endpoint: s.endpoint, keys: s.keys, prefs: cleanPrefs(prefs), added: Date.now() }));
         return json(env, { ok: true }, 201);
       }
 
@@ -113,14 +116,16 @@ export default {
       if (req.method === "POST" && url.pathname === "/notify") {
         if (!env.NOTIFY_TOKEN || req.headers.get("Authorization") !== `Bearer ${env.NOTIFY_TOKEN}`) return json(env, { error: "unauthorized" }, 401);
         const msg = await req.json();
+        const type = msg.type || "block";
         const payload = JSON.stringify({ title: String(msg.title || "Block found!").slice(0, 120), body: String(msg.body || "").slice(0, 500),
                                          url: msg.url || "./", tag: msg.tag || "block" });
-        let sent = 0, removed = 0, failed = 0, cursor;
+        let sent = 0, skipped = 0, removed = 0, failed = 0, cursor;
         do {
           const page = await env.SUBS.list({ prefix: "sub:", cursor });
           await Promise.all(page.keys.map(async ({ name }) => {
             const sub = await env.SUBS.get(name, "json");
             if (!sub) return;
+            if (type !== "test" && !cleanPrefs(sub.prefs)[type]) { skipped++; return; }
             const r = await sendPush(env, sub, payload).catch(() => null);
             if (r && r.status < 300) sent++;
             else if (r && (r.status === 404 || r.status === 410)) { await env.SUBS.delete(name); removed++; }
@@ -128,7 +133,7 @@ export default {
           }));
           cursor = page.list_complete ? null : page.cursor;
         } while (cursor);
-        return json(env, { sent, removed, failed });
+        return json(env, { sent, skipped, removed, failed });
       }
 
       return json(env, { error: "not found" }, 404);

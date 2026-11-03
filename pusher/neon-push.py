@@ -172,13 +172,13 @@ def fmt_si(n):
     return f"{n:.2f}Z"
 
 
-def push_alert(title, body, tag="block"):
+def push_alert(title, body, tag="block", kind="block"):
     env = load_env()
     url, token = env.get("NEON_PUSH_URL"), env.get("NEON_PUSH_TOKEN")
     if not url or not token:
         return None
     req = urllib.request.Request(url.rstrip("/") + "/notify", method="POST",
-                                 data=json.dumps({"title": title, "body": body, "tag": tag}).encode(),
+                                 data=json.dumps({"type": kind, "title": title, "body": body, "tag": tag}).encode(),
                                  headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
                                           "User-Agent": "mikeyrocks-solo-pusher"})
     try:
@@ -201,6 +201,38 @@ def alert_block(key, cfg, b):
     parts.append(f"Reward: {reward / 1e8:.4f} {coin}")
     res = push_alert(f"⛏️ BLOCK FOUND! {coin} #{b['height']:,}", " · ".join(parts), tag=f"block-{key}-{b['height']}")
     print(f"block alert {coin} #{b['height']}: {res}")
+
+
+def watch_rigs(key, cfg, workers, state, now):
+    """Alert on: a rig beating its best-ever share, a rig going offline (>10 min), and coming back."""
+    rigs = state.setdefault("_rigs", {}).setdefault(key, {})
+    first_run = not rigs
+    seen = set()
+    for w in workers:
+        name = w["name"]; seen.add(name)
+        online = bool(w.get("lastshare")) and now - w["lastshare"] < OFFLINE_SECS
+        best = float(w.get("bestever") or 0)
+        r = rigs.get(name)
+        if r is None:
+            rigs[name] = {"online": online, "best": best}
+            continue
+        if not first_run and best > r["best"] > 0:
+            push_alert(f"🎯 NEW BEST DIFF · {cfg['coin']} · {name}",
+                       f"{name} hit {fmt_si(best)} (previous best {fmt_si(r['best'])})",
+                       tag=f"best-{key}-{name}", kind="bestdiff")
+        if r["online"] and not online:
+            push_alert(f"📴 RIG OFFLINE · {cfg['coin']} · {name}",
+                       f"No shares from {name} for 10+ min (last share {(now - w['lastshare']) // 60} min ago)" if w.get("lastshare") else f"No shares from {name} for 10+ min",
+                       tag=f"rig-{key}-{name}", kind="offline")
+        elif not r["online"] and online:
+            push_alert(f"✅ BACK ONLINE · {cfg['coin']} · {name}", f"{name} is submitting shares again",
+                       tag=f"rig-{key}-{name}", kind="offline")
+        r["online"], r["best"] = online, max(best, r["best"])
+    for name, r in rigs.items():          # rig vanished from ckpool entirely
+        if name not in seen and r["online"]:
+            push_alert(f"📴 RIG OFFLINE · {cfg['coin']} · {name}", f"{name} disconnected from the pool",
+                       tag=f"rig-{key}-{name}", kind="offline")
+            r["online"] = False
 
 
 def collect(key, cfg, history):
@@ -267,6 +299,7 @@ def collect(key, cfg, history):
     pool["bestever"] = max(bestever, pool["bestshare"]) or None
     workers.sort(key=lambda w: (-(w["hashrate5m"] or 0)))
     blocks, new_blocks = block_history(key, cfg, history)
+    watch_rigs(key, cfg, workers, history, now)
     # only publish rigs that submitted a share in the last 10 minutes
     workers = [w for w in workers if w["lastshare"] and now - w["lastshare"] < OFFLINE_SECS]
     out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks))
@@ -318,7 +351,7 @@ def main():
     env = load_env()
     if "--test-alert" in sys.argv:
         res = push_alert("🧪 TEST · BLOCK FOUND! BCH #000,000",
-                         "Rig: TEST-RIG · Diff: 1.81T · Effort: 9.5% · Reward: 3.1251 BCH — this is only a test", tag="test")
+                         "Rig: TEST-RIG · Diff: 1.81T · Effort: 9.5% · Reward: 3.1251 BCH — this is only a test", tag="test", kind="test")
         print("test alert:", res if res is not None else "not sent (check NEON_PUSH_URL / NEON_PUSH_TOKEN in config.env)")
         return
     HOME.mkdir(parents=True, exist_ok=True)
