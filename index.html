@@ -142,8 +142,6 @@ footer a{color:var(--cyan);text-decoration:none}
 .alert span{white-space:nowrap;margin-right:12px}
 tr.offline td{color:#8a6070}
 tr.offline td.wname::before{color:var(--red)}
-.st{font-size:10px;letter-spacing:.14em;padding:2px 7px;border:1px solid}
-.st.on{color:var(--grn);border-color:#39ff8855} .st.off{color:var(--red);border-color:#ff3b5c66}
 
 /* block history */
 .history{margin-top:30px;border:1px solid var(--line);background:var(--panel);padding:20px 22px}
@@ -192,9 +190,27 @@ tr.offline td.wname::before{color:var(--red)}
 .apanel.busy{opacity:.6;pointer-events:none}
 @media (max-width:520px){.apanel{left:0;right:auto;width:min(300px,90vw)}}
 
+/* live share log */
+.shares{margin-top:30px;border:1px solid var(--line);background:var(--panel);padding:20px 22px}
+.shares .top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.shares h2{font-family:Orbitron,"Arial Black",sans-serif;font-size:14px;letter-spacing:.32em;color:var(--cyan);text-transform:uppercase;text-shadow:0 0 10px #00f0ff88}
+.tabs{display:flex;gap:6px}
+.tabs button{background:#0006;border:1px solid var(--line);color:var(--dim);font:600 11px "JetBrains Mono",monospace;letter-spacing:.15em;padding:5px 10px;cursor:pointer}
+.tabs button.on{color:#fff;border-color:var(--cyan);box-shadow:inset 0 0 10px #00f0ff22}
+.sscroll{max-height:440px;overflow-y:auto;scrollbar-color:var(--cyan) #0b0e17;scrollbar-width:thin}
+.sscroll thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
+table.st td{font-size:12.5px;padding:6px 8px}
+table.st .s-time{color:var(--dim)} table.st .s-rig{color:var(--grn);text-align:left}
+table.st .s-diff{color:#fff;font-weight:600} table.st .s-dev{color:var(--dim);text-align:right}
+.lk{color:#7fdcff} .lk.hi{color:var(--yel);font-weight:700} .lk.mega{color:#ff9d1c;font-weight:800;text-shadow:0 0 8px #ff9d1c88}
+tr.fresh td{animation:fresh 2.2s ease-out}
+@keyframes fresh{0%{background:#00f0ff2e}100%{background:transparent}}
+.shares .note{font-size:11px;color:var(--dim);margin-top:10px}
+
 /* ===== phone layout ===== */
 .wrap{padding-top:max(28px, calc(env(safe-area-inset-top) + 12px));padding-left:max(20px, env(safe-area-inset-left));padding-right:max(20px, env(safe-area-inset-right));padding-bottom:max(60px, calc(env(safe-area-inset-bottom) + 24px))}
 table.wt td.meta{display:none}
+table.st .s-meta{display:none}
 @media (max-width:620px){
   .wrap{padding-left:max(14px, env(safe-area-inset-left));padding-right:max(14px, env(safe-area-inset-right))}
   header{flex-direction:column;align-items:stretch;gap:12px;margin-bottom:18px}
@@ -241,6 +257,18 @@ table.wt td.meta{display:none}
   html::-webkit-scrollbar,body::-webkit-scrollbar,.hscroll::-webkit-scrollbar{display:none;width:0;height:0}
   table.ht.collapsed tr:nth-child(n+9){display:none}
   .history .more{display:block}
+  .shares{padding:16px}
+  .sscroll{max-height:none;overflow:visible}
+  table.st thead{display:none} table.st, table.st tbody{display:block}
+  table.st tr{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"rig diff" "meta meta";gap:3px 10px;padding:9px 2px;border-bottom:1px solid #121829}
+  table.st td{padding:0;border:0;white-space:nowrap;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  table.st .s-coin{display:none} table.st .s-rig{grid-area:rig;font-weight:600}
+  table.st .s-diff{grid-area:diff;text-align:right}
+  table.st .s-time{display:none}
+  table.st .s-luck,table.st .s-net,table.st .s-dev{display:none}
+  table.st .s-meta{display:block;grid-area:meta;font-size:11px;color:var(--dim);white-space:normal}
+  table.st.collapsed tbody tr:nth-child(n+16){display:none}
+  .shares .more{display:block}
 }
 .more{display:none;width:100%;margin-top:12px;padding:10px;background:#0006;border:1px solid #ff2bd666;color:#ffd0f4;
   font:600 11px "JetBrains Mono",monospace;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}
@@ -284,6 +312,13 @@ table.wt td.meta{display:none}
   <section class="lastblock none" id="lastblock"></section>
 
   <section class="pools" id="pools"></section>
+
+  <section class="shares">
+    <div class="top"><h2>// Live share log</h2>
+      <div class="tabs" id="shareTabs"><button data-c="all" class="on">ALL</button><button data-c="btc">BTC</button><button data-c="bch">BCH</button></div></div>
+    <div class="sscroll" id="sharelog"></div>
+    <div class="note">Latest accepted shares from every rig · luck = share diff ÷ pool target · net % = share diff ÷ network difficulty · refreshes every minute</div>
+  </section>
 
   <section class="history">
     <h2>// Block history</h2>
@@ -477,6 +512,7 @@ function render(d, demo){
     tBest = Math.max(tBest, p.pool?.bestever||0); tBlk += p.blocks_found||0; }
   draws.forEach(f=>f());
   renderBlocks(pools);
+  renderShares(pools);
   const [hv,hu]=si(tH); $("#tHash").innerHTML=`${hv}<small>${hu}H/s</small>`;
   $("#tWork").textContent=num(tW); $("#tBest").textContent=sh(tBest); $("#tBlocks").textContent=num(tBlk);
   const age = now-(d.updated||0), live=$("#live");
@@ -517,6 +553,36 @@ async function load(){
 }
 load(); setInterval(load, REFRESH_MS);
 loadPrices(); setInterval(loadPrices, 5*60_000);
+
+
+/* ===== live share log ===== */
+let shareCoin = "all", seenShares = new Set(), firstShares = true, sharesExpanded = false;
+const fmtTime = t => new Date(t*1000).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+const netPct = p => { if(!isFinite(p)||p<=0) return "—"; return p>=0.01 ? p.toFixed(3)+"%" : p.toExponential(1).replace("e-","e-")+"%"; };
+function renderShares(pools){
+  const rows=[];
+  for(const k of ["btc","bch"]){ if(shareCoin!=="all" && shareCoin!==k) continue;
+    const nd = pools[k]?.node?.difficulty;
+    for(const x of (pools[k]?.shares||[])) rows.push({...x, coin:k, nd}); }
+  rows.sort((a,b)=>b.t-a.t);
+  const box=$("#sharelog");
+  if(!rows.length){ box.innerHTML='<div class="empty">No shares logged yet.</div>'; return; }
+  const html = rows.slice(0,120).map(x=>{
+    const key=x.coin+x.t+x.rig+x.sdiff, isNew=!firstShares && !seenShares.has(key); seenShares.add(key);
+    const luck = x.diff ? x.sdiff/x.diff : null, lc = luck>=10?"mega":luck>=3?"hi":"";
+    const net = x.nd ? netPct(x.sdiff/x.nd*100) : "—";
+    return `<tr class="${isNew?"fresh":""}"><td class="s-time">${fmtTime(x.t)}</td><td class="s-coin"><span class="cb ${x.coin}">${x.coin.toUpperCase()}</span></td>
+      <td class="s-rig">${esc(x.rig)}</td><td class="s-diff">${sh(x.sdiff)}</td><td class="s-luck"><span class="lk ${lc}">${luck?luck.toFixed(1)+"×":"—"}</span></td>
+      <td class="s-net">${net}</td><td class="s-dev">${esc(x.dev||"—")}</td>
+      <td class="s-meta">${fmtTime(x.t)} · <span class="lk ${lc}">${luck?luck.toFixed(1)+"×":""}</span> · ${net} · ${esc(x.dev||"")}${shareCoin==="all"?` · <span class="cb ${x.coin}">${x.coin.toUpperCase()}</span>`:""}</td></tr>`; }).join("");
+  firstShares=false;
+  box.innerHTML = `<table class="st${sharesExpanded?"":" collapsed"}"><thead><tr><th>Time</th><th>Coin</th><th>Rig</th><th>Share diff</th><th>Luck</th><th>Net %</th><th>Device</th></tr></thead><tbody>${html}</tbody></table>
+    ${rows.length>15?`<button class="more" id="sharesMore">${sharesExpanded?"Show fewer":`Show all ${Math.min(rows.length,120)} shares`}</button>`:""}`;
+  const m=$("#sharesMore"); if(m) m.onclick=()=>{ sharesExpanded=!sharesExpanded; renderShares(pools); };
+}
+document.querySelectorAll("#shareTabs button").forEach(b=>b.addEventListener("click",()=>{
+  shareCoin=b.dataset.c; document.querySelectorAll("#shareTabs button").forEach(x=>x.classList.toggle("on",x===b));
+  if(lastRender) renderShares(lastRender[0].pools||{}); }));
 
 /* ===== PUSH ALERTS (web push via Cloudflare Worker) ===== */
 const PUSH_API = "https://mikeyrocks-solo-push.seoxoner.workers.dev";

@@ -128,6 +128,69 @@ def parse_blocks(text):
     return out
 
 
+SHARES_PER_POOL = 60
+
+
+def device_name(agent):
+    """'NerdQAxe++/BM1370/v1.0.37.1' -> 'NerdQAxe++'; Braiins/bosminer strings -> 'Braiins OS'."""
+    a = str(agent or "").strip()
+    if not a:
+        return None
+    low = a.lower()
+    if "bosminer" in low or "braiins" in low:
+        return "Braiins OS"
+    for key, name in (("whatsminer", "Whatsminer"), ("antminer", "Antminer"), ("cgminer", "cgminer"), ("bmminer", "Antminer")):
+        if key in low:
+            return name
+    return a.split("/")[0].split(" ")[0][:24]
+
+
+def recent_shares(cfg, n=SHARES_PER_POOL):
+    """Newest accepted shares from ckpool's sharelogs (www/<height>/<workinfo>.sharelog, one JSON per line).
+    Published per share: time, rig, share diff, target diff, device. Never the miner's IP or address."""
+    www = cfg["pooldir"]
+    try:
+        dirs = sorted((d for d in www.iterdir() if d.is_dir() and re.fullmatch(r"[0-9a-f]{8}", d.name)),
+                      key=lambda d: d.stat().st_mtime, reverse=True)[:2]
+    except Exception:
+        return []
+    out = []
+    for d in dirs:
+        try:
+            files = sorted(d.glob("*.sharelog"), key=lambda f: f.stat().st_mtime, reverse=True)
+        except Exception:
+            continue
+        for f in files:
+            try:
+                with open(f, "rb") as fh:
+                    fh.seek(0, 2); size = fh.tell()
+                    fh.seek(max(0, size - 65536))
+                    lines = fh.read().decode("utf-8", "replace").splitlines()
+            except Exception:
+                continue
+            for line in reversed(lines):
+                try:
+                    j = json.loads(line)
+                except Exception:
+                    continue
+                if not j.get("result"):
+                    continue
+                cd = str(j.get("createdate", "")).split(",")
+                try:
+                    t = int(cd[0]) + (int(cd[1][:3]) / 1000 if len(cd) > 1 and cd[1] else 0)
+                except ValueError:
+                    continue
+                out.append({"t": round(t, 3), "rig": rig_name(str(j.get("workername", ""))),
+                            "sdiff": round(float(j.get("sdiff") or 0), 2), "diff": float(j.get("diff") or 0),
+                            "dev": device_name(j.get("agent"))})
+            if len(out) >= n * 2:
+                break
+        if len(out) >= n * 2:
+            break
+    out.sort(key=lambda x: x["t"], reverse=True)
+    return out[:n]
+
+
 def read_app_blocks(cfg):
     d = read_json_retry(cfg["pooldir"].parent.parent / "ui" / "state" / "blocks_state.json")
     if d is None:
@@ -397,7 +460,8 @@ def collect(key, cfg, history):
     watch_rigs(key, cfg, workers, history, now)
     # only publish rigs that submitted a share in the last 10 minutes
     workers = [w for w in workers if w["lastshare"] and now - w["lastshare"] < OFFLINE_SECS]
-    out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks))
+    out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks),
+               shares=recent_shares(cfg))
 
     # --- push alert for blocks found since the last run (skip old ones from the first log read) ---
     for b in new_blocks:
