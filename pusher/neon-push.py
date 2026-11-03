@@ -206,7 +206,8 @@ def collect(key, cfg, history):
                                 "hashrate1h": hr(w.get("hashrate1hr")), "hashrate1d": hr(w.get("hashrate1d")),
                                 "lastshare": w.get("lastshare"), "bestshare": w.get("bestshare"),
                                 "bestever": w.get("bestever")})
-    pool["bestshare"] = max(pool.get("bestshare") or 0, bestround) or 0
+    rig_best = max((w.get("bestshare") or 0 for w in workers), default=0)
+    pool["bestshare"] = int(max(pool.get("bestshare") or 0, bestround, rig_best)) or 0
     pool["bestever"] = max(bestever, pool["bestshare"]) or None
     workers.sort(key=lambda w: (-(w["hashrate5m"] or 0)))
     blocks = block_history(key, cfg, history)
