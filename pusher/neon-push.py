@@ -83,14 +83,22 @@ def rpc(cfg, *args):
         return None
 
 
-def blocks_found(cfg):
-    """Count blocks ckpool reports as solved, from the container log (best effort)."""
+def blocks_found(key, cfg, state):
+    """Count blocks ckpool reports as solved. Reads only log lines since the last run;
+    the running total is kept in the local state file (best effort)."""
+    st = state.setdefault("_blocks", {}).setdefault(key, {"count": 0, "since": None})
+    now = int(time.time())
+    cmd = ["docker", "logs", cfg["ckpool_container"]]
+    if st["since"]:
+        cmd[2:2] = ["--since", str(st["since"])]
     try:
-        r = subprocess.run(["docker", "logs", cfg["ckpool_container"]], capture_output=True, text=True, timeout=30)
-        txt = r.stdout + r.stderr
-        return len(re.findall(r"BLOCK ACCEPTED|Solved and confirmed block", txt, re.I))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if r.returncode == 0:
+            st["count"] += len(re.findall(r"BLOCK ACCEPTED|Solved and confirmed block", r.stdout + r.stderr, re.I))
+            st["since"] = now
     except Exception:
-        return 0
+        pass
+    return st["count"]
 
 
 def collect(key, cfg, history):
@@ -142,7 +150,7 @@ def collect(key, cfg, history):
                                 "bestever": w.get("bestever")})
     pool["bestever"] = max(bestever, pool.get("bestshare") or 0) or None
     workers.sort(key=lambda w: -(w["hashrate5m"] or 0))
-    out.update(pool=pool, workers=workers, payout=payout, blocks_found=blocks_found(cfg))
+    out.update(pool=pool, workers=workers, payout=payout, blocks_found=blocks_found(key, cfg, history))
 
     # --- history (local file, last 24h of 5m hashrate) ---
     h = [p for p in history.get(key, []) if p[0] > now - HISTORY_SECS]
