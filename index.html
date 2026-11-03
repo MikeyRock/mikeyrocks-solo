@@ -229,6 +229,9 @@ tr.offline td.wname::before{color:var(--red)}
 
 <script>
 /* ===== CONFIG ===== */
+// Fresh copy via the GitHub API (~1 min old); ETag revalidation keeps it within the
+// unauthenticated rate limit. Falls back to raw.githubusercontent (cached up to 5 min).
+const API_URL  = "https://api.github.com/repos/MikeyRock/mikeyrocks-solo/contents/stats.json?ref=data";
 const DATA_URL = "https://raw.githubusercontent.com/MikeyRock/mikeyrocks-solo/data/stats.json";
 const REFRESH_MS = 60_000;
 const STALE_AFTER = 15 * 60;           // seconds
@@ -369,12 +372,14 @@ function demoData(){
       history:hist(2.3e12)}}};
 }
 
+let lastGood=null;
+async function getJSON(url, opts){ const r = await fetch(url, opts); if(!r.ok) throw new Error(r.status); return r.json(); }
 async function load(){
-  try{
-    const r = await fetch(DATA_URL+"?t="+Date.now(), {cache:"no-store"});
-    if(!r.ok) throw new Error(r.status);
-    render(await r.json(), false);
-  }catch(e){ render(demoData(), true); }
+  let d=null;
+  try{ d = await getJSON(API_URL, {cache:"no-cache", headers:{Accept:"application/vnd.github.raw+json"}}); }
+  catch(e){ try{ d = await getJSON(DATA_URL+"?t="+Date.now(), {cache:"no-store"}); }catch(e2){} }
+  if(d && (!lastGood || (d.updated||0) >= (lastGood.updated||0))) lastGood = d;
+  if(lastGood) render(lastGood, false); else render(demoData(), true);
 }
 load(); setInterval(load, REFRESH_MS);
 addEventListener("resize", ()=>draws.forEach(f=>f()));
