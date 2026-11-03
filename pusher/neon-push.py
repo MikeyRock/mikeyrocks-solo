@@ -182,8 +182,8 @@ def collect(key, cfg, history):
     pool["bestever"] = max(bestever, pool.get("bestshare") or 0) or None
     workers.sort(key=lambda w: (-(w["hashrate5m"] or 0)))
     blocks = block_history(key, cfg, history)
-    for w in workers:
-        w["online"] = bool(w["lastshare"]) and now - w["lastshare"] < OFFLINE_SECS
+    # only publish rigs that submitted a share in the last 10 minutes
+    workers = [w for w in workers if w["lastshare"] and now - w["lastshare"] < OFFLINE_SECS]
     out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks))
 
     # --- history (local file, last 24h of 5m hashrate) ---

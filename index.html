@@ -168,7 +168,7 @@ tr.offline td.wname::before{color:var(--red)}
 
   <section class="totals">
     <div class="tot"><div class="k">Total hashrate</div><div class="v" id="tHash">—</div></div>
-    <div class="tot"><div class="k">Workers online</div><div class="v" id="tWork">—</div></div>
+    <div class="tot"><div class="k">Rigs online</div><div class="v" id="tWork">—</div></div>
     <div class="tot"><div class="k">Best share ever</div><div class="v" id="tBest">—</div></div>
     <div class="tot"><div class="k">Blocks found</div><div class="v" id="tBlocks">—</div></div>
   </section>
@@ -205,7 +205,7 @@ tr.offline td.wname::before{color:var(--red)}
     <div class="grid">
       <div class="cell"><div class="k">1h avg</div><div class="v" data-f="hr1h"></div></div>
       <div class="cell"><div class="k">24h avg</div><div class="v" data-f="hr1d"></div></div>
-      <div class="cell"><div class="k">Workers</div><div class="v c" data-f="workers"></div></div>
+      <div class="cell"><div class="k">Rigs online</div><div class="v c" data-f="workers"></div></div>
       <div class="cell"><div class="k">Best share</div><div class="v" data-f="best"></div></div>
       <div class="cell"><div class="k">Best ever</div><div class="v c" data-f="bestever"></div></div>
       <div class="cell"><div class="k">Payout</div><div class="v" data-f="payout"></div></div>
@@ -222,7 +222,6 @@ tr.offline td.wname::before{color:var(--red)}
     </div>
 
     <div class="sect">Workers</div>
-    <div data-f="offline"></div>
     <div data-f="wtable"></div>
   </article>
 </template>
@@ -277,11 +276,11 @@ function renderPool(key, p, now){
   const tag=f("tag");
   if(!fresh){ tag.className="tag bad"; tag.textContent="offline"; }
   else if(!node.synced){ tag.className="tag warn"; tag.textContent="syncing"; }
-  else if((pool.workers||0)===0){ tag.className="tag warn"; tag.textContent="no workers"; }
+  else if(!(p.workers||[]).some(w=>isOn(w,now))){ tag.className="tag warn"; tag.textContent="no workers"; }
   else { tag.className="tag ok"; tag.textContent="● mining"; }
   const [v,u] = si(hr["5m"] ?? hr["1m"]); f("hr").textContent=v; f("hrU").textContent=u?u+"H/s":"";
   f("hr1h").textContent=hs(hr["1h"]); f("hr1d").textContent=hs(hr["1d"]);
-  f("workers").textContent=num(pool.workers);
+  f("workers").textContent=num((p.workers||[]).filter(w=>isOn(w,now)).length);
   f("best").textContent=sh(pool.bestshare); f("bestever").textContent=sh(pool.bestever);
   f("payout").textContent=p.payout||"—";
   f("height").textContent=num(node.blocks);
@@ -294,14 +293,11 @@ function renderPool(key, p, now){
   const prog = Math.min(1, node.progress ?? 0);
   f("sync").textContent = node.synced ? "100%" : (prog*100).toFixed(1)+"%";
   f("syncBar").style.width = (node.synced?100:prog*100)+"%";
-  const ws = (p.workers||[]).map(w=>({...w, on: isOn(w,now)}));
-  ws.sort((a,b)=> (b.on-a.on) || ((b.hashrate5m||0)-(a.hashrate5m||0)));
-  const off = ws.filter(w=>!w.on);
-  f("offline").innerHTML = off.length ? `<div class="alert"><b>⚠ ${off.length} OFFLINE &gt;10M</b><br>${
-    off.map(w=>`<span>▸ ${esc(w.name)} · ${ago(w.lastshare)}</span>`).join("")}</div>` : "";
-  f("wtable").innerHTML = ws.length ? `<table><thead><tr><th>Worker</th><th>Status</th><th>5m</th><th class="hide-sm">1h</th><th class="hide-sm">Best</th><th>Last share</th></tr></thead><tbody>${
-    ws.map(w=>`<tr class="${w.on?"":"offline"}"><td class="wname">${esc(w.name)}</td><td><span class="st ${w.on?"on":"off"}">${w.on?"ONLINE":"OFFLINE"}</span></td><td>${w.on?hs(w.hashrate5m??w.hashrate1m):"—"}</td><td class="hide-sm">${hs(w.hashrate1h)}</td><td class="hide-sm">${sh(w.bestever??w.bestshare)}</td><td class="${w.on?"on":"off"}">${ago(w.lastshare)}</td></tr>`).join("")
-  }</tbody></table>` : `<div class="empty">no workers connected</div>`;
+  const ws = (p.workers||[]).filter(w=>isOn(w,now));
+  ws.sort((a,b)=> (b.hashrate5m||0)-(a.hashrate5m||0));
+  f("wtable").innerHTML = ws.length ? `<table><thead><tr><th>Worker</th><th>5m</th><th class="hide-sm">1h</th><th class="hide-sm">Best</th><th>Last share</th></tr></thead><tbody>${
+    ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td>${hs(w.hashrate5m??w.hashrate1m)}</td><td class="hide-sm">${hs(w.hashrate1h)}</td><td class="hide-sm">${sh(w.bestever??w.bestshare)}</td><td class="on">${ago(w.lastshare)}</td></tr>`).join("")
+  }</tbody></table>` : `<div class="empty">no rigs hashing right now</div>`;
   return [el, () => drawChart(f("chart"), p.history, color)];
 }
 const OFFLINE_SECS = 600;
@@ -337,12 +333,12 @@ function render(d, demo){
   for(const k of ["btc","bch"]){ const p=pools[k]; if(!p) continue;
     const [el,draw]=renderPool(k,p,now); box.appendChild(el); draws.push(draw);
     const hr=p.pool?.hashrate||{}; tH += (hr["5m"]??hr["1m"]??0);
-    tW += (p.workers||[]).filter(w=>isOn(w,now)).length; tOff += (p.workers||[]).filter(w=>!isOn(w,now)).length;
+    tW += (p.workers||[]).filter(w=>isOn(w,now)).length;
     tBest = Math.max(tBest, p.pool?.bestever||0); tBlk += p.blocks_found||0; }
   draws.forEach(f=>f());
   renderBlocks(pools);
   const [hv,hu]=si(tH); $("#tHash").innerHTML=`${hv}<small>${hu}H/s</small>`;
-  $("#tWork").innerHTML=`${num(tW)}${tOff?`<small style="color:var(--red)"> / ${tOff} off</small>`:""}`; $("#tBest").textContent=sh(tBest); $("#tBlocks").textContent=num(tBlk);
+  $("#tWork").textContent=num(tW); $("#tBest").textContent=sh(tBest); $("#tBlocks").textContent=num(tBlk);
   const age = now-(d.updated||0), live=$("#live");
   if(demo){ live.className="pill demo"; $("#liveTxt").textContent="DEMO DATA"; }
   else if(age<STALE_AFTER){ live.className="pill live"; $("#liveTxt").textContent="LIVE FEED"; }
@@ -360,7 +356,7 @@ function demoData(){
     btc:{name:"AxeBTC",coin:"BTC",updated:now,payout:"bc1q…demo",blocks_found:1,
       node:{blocks:974289,headers:974289,synced:true,progress:1,peers:10,difficulty:1.48e14,subversion:"/Satoshi:30.0.0/"},
       pool:{workers:9,hashrate:{"1m":8.6e13,"5m":8.597e13,"1h":8.4e13,"1d":8.3e13},bestshare:2.1e9,bestever:4.7e10},
-      workers:[{name:"bitaxe-01",hashrate5m:1.2e12,hashrate1h:1.1e12,lastshare:now-12,bestever:3.3e9},{name:"nerdqaxe-02",hashrate5m:4.8e12,hashrate1h:4.7e12,lastshare:now-4,bestever:4.7e10},{name:"NerdAxe",hashrate5m:0,hashrate1h:4e11,lastshare:now-1500,bestever:9e8}],
+      workers:[{name:"bitaxe-01",hashrate5m:1.2e12,hashrate1h:1.1e12,lastshare:now-12,bestever:3.3e9},{name:"nerdqaxe-02",hashrate5m:4.8e12,hashrate1h:4.7e12,lastshare:now-4,bestever:4.7e10}],
       blocks:[{height:974400,time:now-3*86400,rig:"S19JPro"}],
       history:hist(8.5e13)},
     bch:{name:"AxeBCH",coin:"BCH",updated:now,payout:"bitcoincash:q…demo",blocks_found:1,blocks:[{height:921010,time:now-40*86400,rig:"AXE111"}],
