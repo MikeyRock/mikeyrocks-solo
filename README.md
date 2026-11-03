@@ -7,7 +7,7 @@ Public, read-only status page for my home solo-mining setup: **AxeBTC** and **Ax
 ## How it works
 
 ```
-Umbrel ──(every 3 min, outbound only)──▶ GitHub `data` branch: stats.json ──▶ GitHub Pages (index.html)
+Umbrel ──(every 1 min, outbound only)──▶ GitHub `data` branch: stats.json ──▶ GitHub Pages (index.html)
 ```
 
 - `pusher/neon-push.py` runs on the Umbrel. It reads ckpool's `pool.status` and `users/` files plus the node's
