@@ -18,12 +18,14 @@ POOLS = {
         "pooldir": APPDATA / "willitmod-btc/data/pool/www",
         "container": "willitmod-btc_bitcoind_1",
         "cli": ["bitcoin-cli", "-datadir=/data"],
+        "gbt": ['{"rules":["segwit"]}'],
     },
     "bch": {
         "name": "AxeBCH", "coin": "BCH",
         "pooldir": APPDATA / "willitmod-dev-bch/data/pool/www",
         "container": "willitmod-dev-bch_bchn_1",
         "cli": ["bitcoin-cli", "-datadir=/data"],
+        "gbt": [],
     },
 }
 HISTORY_SECS = 24 * 3600
@@ -165,6 +167,16 @@ def collect(key, cfg, history):
         "subversion": net.get("subversion"),
         "online": bool(bci),
     }
+
+    # --- reward for the block being mined right now: subsidy + fees in the template ---
+    if bci.get("blocks") is not None:
+        height = bci["blocks"] + 1
+        subsidy = (50 * 100_000_000) >> (height // 210_000)
+        gbt = rpc(cfg, "getblocktemplate", *cfg.get("gbt", [])) if out["node"]["synced"] else None
+        total = (gbt or {}).get("coinbasevalue")
+        out["reward"] = {"height": height, "subsidy_sats": subsidy,
+                         "fees_sats": (total - subsidy) if total else None,
+                         "total_sats": total or subsidy, "live": bool(total)}
 
     # --- pool ---
     status = cfg["pooldir"] / "pool" / "pool.status"

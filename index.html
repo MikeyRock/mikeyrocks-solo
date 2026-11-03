@@ -147,6 +147,15 @@ tr.offline td.wname::before{color:var(--red)}
 .lucky{color:var(--grn)!important} .unlucky{color:#ff9db0!important}
 .cb{font-weight:800;letter-spacing:.1em} .cb.btc{color:var(--btc)} .cb.bch{color:var(--bch)}
 
+/* reward */
+.reward{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px;margin:14px 0 4px;padding:12px 14px;
+  border:1px solid color-mix(in srgb,var(--c) 45%,transparent);background:linear-gradient(90deg,color-mix(in srgb,var(--c) 14%,transparent),transparent 70%)}
+.reward .k{font-size:10px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase;width:100%}
+.reward .rv{font-family:Orbitron,"Arial Black",sans-serif;font-weight:900;font-size:24px;color:#fff}
+.reward .rv u{text-decoration:none;color:var(--c);font-size:15px;margin-left:6px}
+.reward .usd{font-family:Orbitron,"Arial Black",sans-serif;font-weight:700;font-size:18px;color:var(--yel);text-shadow:0 0 10px #f5ff3b66}
+.reward .rs{font-size:11px;color:var(--dim);width:100%}
+
 @media (max-width:980px){.pools{grid-template-columns:1fr}.totals{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,1fr)}.status{align-items:flex-start}.hide-sm{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
@@ -200,6 +209,7 @@ tr.offline td.wname::before{color:var(--red)}
     </div>
     <div class="hero-k">Pool hashrate · 5m</div>
     <div class="hero"><span class="big" data-f="hr"></span><span class="unit" data-f="hrU"></span></div>
+    <div class="reward" data-f="reward"></div>
     <canvas data-f="chart"></canvas>
 
     <div class="sect">Pool</div>
@@ -283,6 +293,7 @@ function renderPool(key, p, now){
   else if(!(p.workers||[]).some(w=>isOn(w,now))){ tag.className="tag warn"; tag.textContent="no workers"; }
   else { tag.className="tag ok"; tag.textContent="● mining"; }
   const [v,u] = si(hr["5m"] ?? hr["1m"]); f("hr").textContent=v; f("hrU").textContent=u?u+"H/s":"";
+  f("reward").innerHTML = rewardHTML(key, p.reward);
   f("hr1h").textContent=hs(hr["1h"]); f("hr1d").textContent=hs(hr["1d"]);
   f("workers").textContent=num((p.workers||[]).filter(w=>isOn(w,now)).length);
   f("best").textContent=sh(pool.bestshare); f("bestever").textContent=sh(pool.bestever);
@@ -308,6 +319,21 @@ const OFFLINE_SECS = 600;
 const isOn = (w,now) => !!w.lastshare && now - w.lastshare < OFFLINE_SECS;
 const EXPLORER = {btc: h=>`https://mempool.space/block/${h}`, bch: h=>`https://blockchair.com/bitcoin-cash/block/${h}`};
 const fmtDate = t => new Date(t*1000).toLocaleString(undefined,{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+let PRICES = {};
+async function loadPrices(){
+  try{ const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,bitcoin-cash&vs_currencies=usd");
+       if(r.ok){ const j = await r.json(); PRICES = {btc:j.bitcoin?.usd, bch:j["bitcoin-cash"]?.usd}; if(lastRender) render(...lastRender); } }catch(e){}
+}
+const coinAmt = sats => { const v=sats/1e8; return v.toFixed(v>=0.01?4:8).replace(/0+$/,"").replace(/\.$/,""); };
+const usd = n => "$"+Math.round(n).toLocaleString();
+function rewardHTML(key, rw){
+  if(!rw) return `<div class="k">Reward if hit</div><div class="rs">waiting for node…</div>`;
+  const C = key.toUpperCase(), px = PRICES[key];
+  return `<div class="k">Reward if hit · block #${num(rw.height)}</div>
+    <div class="rv">${coinAmt(rw.total_sats)}<u>${C}</u></div>
+    ${px?`<div class="usd">≈ ${usd(rw.total_sats/1e8*px)}</div>`:""}
+    <div class="rs">${coinAmt(rw.subsidy_sats)} subsidy + ${rw.fees_sats!=null?coinAmt(rw.fees_sats):"?"} fees${px?` · ${C} ${usd(px)}`:""}${rw.live?"":" · fees unavailable"}</div>`;
+}
 const effCls = e => e<=100 ? "lucky" : "unlucky";
 function renderBlocks(pools){
   const all=[]; for(const k of ["btc","bch"]) for(const b of (pools[k]?.blocks||[])) all.push({...b, coin:k});
@@ -332,7 +358,9 @@ function renderBlocks(pools){
 const esc = s => String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 let draws=[];
+let lastRender=null;
 function render(d, demo){
+  lastRender=[d,demo];
   const now = Date.now()/1000, pools = d.pools||{};
   const box = $("#pools"); box.innerHTML=""; draws=[];
   let tH=0,tW=0,tOff=0,tBest=0,tBlk=0;
@@ -351,7 +379,7 @@ function render(d, demo){
   else if(age<3600){ live.className="pill stale"; $("#liveTxt").textContent="FEED DELAYED"; }
   else { live.className="pill dead"; $("#liveTxt").textContent="FEED OFFLINE"; }
   $("#updated").textContent = "last sync "+ago(d.updated);
-  const t = ["btc","bch"].filter(k=>pools[k]).map(k=>{const p=pools[k];return `${k.toUpperCase()} ${hs(p.pool?.hashrate?.["5m"])} · HEIGHT ${num(p.node?.blocks)} · DIFF ${sh(p.node?.difficulty)} · BEST ${sh(p.pool?.bestever)}`});
+  const t = ["btc","bch"].filter(k=>pools[k]).map(k=>{const p=pools[k];return `${k.toUpperCase()} ${hs(p.pool?.hashrate?.["5m"])}${p.reward?` · REWARD ${coinAmt(p.reward.total_sats)} ${k.toUpperCase()}${PRICES[k]?` (${usd(p.reward.total_sats/1e8*PRICES[k])})`:""}`:""} · HEIGHT ${num(p.node?.blocks)} · DIFF ${sh(p.node?.difficulty)} · BEST ${sh(p.pool?.bestever)}`});
   const line = t.map(x=>`<em>◆</em>${x}`).join("") + `<em>◆</em>ONE SHARE AWAY FROM GLORY`;
   $("#ticker").innerHTML = line+line;
 }
@@ -359,13 +387,13 @@ function render(d, demo){
 function demoData(){
   const now=Date.now()/1000, hist=(base)=>Array.from({length:288},(_,i)=>[now-(287-i)*300, base*(0.85+Math.random()*0.3)]);
   return { updated: now, pools:{
-    btc:{name:"AxeBTC",coin:"BTC",updated:now,payout:"bc1q…demo",blocks_found:1,
+    btc:{name:"AxeBTC",coin:"BTC",updated:now,reward:{height:974290,subsidy_sats:312500000,fees_sats:2140000,total_sats:314640000,live:true},payout:"bc1q…demo",blocks_found:1,
       node:{blocks:974289,headers:974289,synced:true,progress:1,peers:10,difficulty:1.48e14,subversion:"/Satoshi:30.0.0/"},
       pool:{workers:9,hashrate:{"1m":8.6e13,"5m":8.597e13,"1h":8.4e13,"1d":8.3e13},bestshare:2.1e9,bestever:4.7e10},
       workers:[{name:"bitaxe-01",hashrate5m:1.2e12,hashrate1h:1.1e12,lastshare:now-12,bestever:3.3e9},{name:"nerdqaxe-02",hashrate5m:4.8e12,hashrate1h:4.7e12,lastshare:now-4,bestever:4.7e10}],
       blocks:[{height:974400,time:now-3*86400,rig:"S19JPro",effort:42.7}],
       history:hist(8.5e13)},
-    bch:{name:"AxeBCH",coin:"BCH",updated:now,payout:"bitcoincash:q…demo",blocks_found:1,blocks:[{height:973981,time:now-11*86400,rig:"LPRAY",effort:9.5},{height:973980,time:now-11*86400-690,rig:"LPRAY",effort:191.9}],
+    bch:{name:"AxeBCH",coin:"BCH",updated:now,reward:{height:921001,subsidy_sats:312500000,fees_sats:3100,total_sats:312503100,live:true},payout:"bitcoincash:q…demo",blocks_found:1,blocks:[{height:973981,time:now-11*86400,rig:"LPRAY",effort:9.5},{height:973980,time:now-11*86400-690,rig:"LPRAY",effort:191.9}],
       node:{blocks:921000,headers:921000,synced:true,progress:1,peers:8,difficulty:6.1e11,subversion:"/Bitcoin Cash Node:29.0.0/"},
       pool:{workers:2,hashrate:{"1m":2.4e12,"5m":2.3e12,"1h":2.2e12,"1d":2.1e12},bestshare:9e8,bestever:6.2e9},
       workers:[{name:"bitaxe-bch",hashrate5m:1.2e12,hashrate1h:1.1e12,lastshare:now-30,bestever:6.2e9}],
@@ -382,6 +410,7 @@ async function load(){
   if(lastGood) render(lastGood, false); else render(demoData(), true);
 }
 load(); setInterval(load, REFRESH_MS);
+loadPrices(); setInterval(loadPrices, 5*60_000);
 addEventListener("resize", ()=>draws.forEach(f=>f()));
 </script>
 </body>
