@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MikeyRocks//Solo — Pool Status</title>
 <meta name="description" content="Live status of a home solo mining rig: AxeBTC + AxeBCH on Umbrel.">
 <link rel="manifest" href="manifest.webmanifest">
@@ -192,6 +192,53 @@ tr.offline td.wname::before{color:var(--red)}
 .apanel.busy{opacity:.6;pointer-events:none}
 @media (max-width:520px){.apanel{left:0;right:auto;width:min(300px,90vw)}}
 
+/* ===== phone layout ===== */
+.wrap{padding-top:max(28px, calc(env(safe-area-inset-top) + 12px));padding-left:max(20px, env(safe-area-inset-left));padding-right:max(20px, env(safe-area-inset-right));padding-bottom:max(60px, calc(env(safe-area-inset-bottom) + 24px))}
+table.wt td.meta{display:none}
+@media (max-width:620px){
+  .wrap{padding-left:max(14px, env(safe-area-inset-left));padding-right:max(14px, env(safe-area-inset-right))}
+  header{flex-direction:column;align-items:stretch;gap:12px;margin-bottom:18px}
+  .sub{letter-spacing:.18em;font-size:10.5px}
+  .status{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+  .status .muted{order:3;width:100%;font-size:11px}
+  .totals{gap:10px;margin-bottom:18px}
+  .tot{padding:12px 14px} .tot .v{font-size:21px}
+  .lastblock{padding:16px;gap:12px 22px;margin-bottom:18px}
+  .lastblock .trophy{font-size:26px}
+  .pool{padding:16px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+  .glyph{width:42px;height:42px;font-size:19px}
+  .pname{font-size:18px}
+  .grid{grid-template-columns:1fr 1fr}
+  .cell{padding:10px 12px} .cell .v{font-size:15px}
+  canvas{height:90px}
+  .reward .rv{font-size:20px} .reward .usd{font-size:16px}
+  .history{padding:16px}
+
+  /* worker rows become two-line cards */
+  table.wt thead, table.ht thead{display:none}
+  table.wt, table.wt tbody, table.ht, table.ht tbody{display:block}
+  table.wt tr{display:grid;grid-template-columns:1fr auto;grid-template-areas:"name hr" "meta last";gap:3px 10px;padding:10px 2px;border-bottom:1px solid #121829}
+  table.wt td{padding:0;border:0;text-align:left;white-space:nowrap}
+  table.wt .wname{grid-area:name;font-weight:600;color:#fff;font-size:14px}
+  table.wt .c-hr{grid-area:hr;text-align:right;font-weight:600;color:var(--c);font-size:14px}
+  table.wt .c-1h, table.wt .c-best{display:none}
+  table.wt td.meta{display:block}
+  table.wt .c-last{grid-area:last;text-align:right;font-size:11.5px}
+  table.wt .meta{grid-area:meta;font-size:11.5px;color:var(--dim)}
+  table.wt .meta b{color:var(--txt);font-weight:600}
+
+  /* block history rows become cards */
+  table.ht tr{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"coin blk eff" "date date rig" "diff diff diff";gap:3px 10px;padding:10px 2px;border-bottom:1px solid #121829}
+  table.ht td{padding:0;border:0;text-align:left;white-space:nowrap}
+  table.ht .h-coin{grid-area:coin} table.ht .h-blk{grid-area:blk;font-weight:600}
+  table.ht .h-eff{grid-area:eff;text-align:right;font-weight:600}
+  table.ht .h-date{grid-area:date;font-size:11.5px;color:var(--dim)}
+  table.ht .h-rig{grid-area:rig;text-align:right;font-size:12px;color:var(--yel)}
+  table.ht .h-diff{grid-area:diff;font-size:11.5px;color:var(--dim)}
+  table.ht .h-diff::before{content:"share diff "}
+  .hscroll{max-height:420px}
+}
+
 @media (max-width:980px){.pools{grid-template-columns:1fr}.totals{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,1fr)}.status{align-items:flex-start}.hide-sm{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
@@ -358,8 +405,8 @@ function renderPool(key, p, now){
   f("syncBar").style.width = (node.synced?100:prog*100)+"%";
   const ws = (p.workers||[]).filter(w=>isOn(w,now));
   ws.sort((a,b)=> String(a.name).localeCompare(String(b.name), undefined, {numeric:true, sensitivity:"base"}));
-  f("wtable").innerHTML = ws.length ? `<table><thead><tr><th>Worker</th><th>5m</th><th class="hide-sm">1h</th><th class="hide-sm">Best</th><th>Last share</th></tr></thead><tbody>${
-    ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td>${hs(w.hashrate5m??w.hashrate1m)}</td><td class="hide-sm">${hs(w.hashrate1h)}</td><td class="hide-sm">${sh(w.bestever??w.bestshare)}</td><td class="on">${ago(w.lastshare)}</td></tr>`).join("")
+  f("wtable").innerHTML = ws.length ? `<table class="wt"><thead><tr><th>Worker</th><th>5m</th><th>1h</th><th>Best</th><th>Last share</th></tr></thead><tbody>${
+    ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td class="c-hr">${hs(w.hashrate5m??w.hashrate1m)}</td><td class="c-1h">${hs(w.hashrate1h)}</td><td class="c-best">${sh(w.bestever??w.bestshare)}</td><td class="c-last on">${ago(w.lastshare)}</td><td class="meta">best <b>${sh(w.bestever??w.bestshare)}</b> · 1h ${hs(w.hashrate1h)}</td></tr>`).join("")
   }</tbody></table>` : `<div class="empty">no rigs hashing right now</div>`;
   return [el, () => drawChart(f("chart"), p.history, color)];
 }
@@ -400,8 +447,8 @@ function renderBlocks(pools){
     lb.className="lastblock none";
     lb.innerHTML=`<div><div class="lb-k">Last block found</div><div class="lb-main">None yet — still hunting</div></div>`;
   }
-  $("#history").innerHTML = all.length ? `<table><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th><th class="hide-sm">Share diff</th><th>Effort</th></tr></thead><tbody>${
-    all.map(b=>`<tr><td><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td>${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td>${fmtDate(b.time)}</td><td>${esc(b.rig)}</td><td class="hide-sm">${b.diff?sh(b.diff):"—"}</td><td class="${b.effort!=null?effCls(b.effort):""}">${b.effort!=null?b.effort.toFixed(1)+"%":"—"}</td></tr>`).join("")
+  $("#history").innerHTML = all.length ? `<table class="ht"><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th><th>Share diff</th><th>Effort</th></tr></thead><tbody>${
+    all.map(b=>`<tr><td class="h-coin"><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td class="h-blk">${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td class="h-date">${fmtDate(b.time)}</td><td class="h-rig">${esc(b.rig)}</td><td class="h-diff">${b.diff?sh(b.diff):"—"}</td><td class="h-eff ${b.effort!=null?effCls(b.effort):""}">${b.effort!=null?b.effort.toFixed(1)+"%":"—"}</td></tr>`).join("")
   }</tbody></table>` : `<div class="empty">No blocks found yet. When a rig hits one, it lands here with block #, date and rig name.</div>`;
 }
 const esc = s => String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
