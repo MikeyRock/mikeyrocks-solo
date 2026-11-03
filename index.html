@@ -241,7 +241,7 @@ table.wt td.meta{display:none}
 
 @media (max-width:980px){.pools{grid-template-columns:1fr}.totals{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,1fr)}.status{align-items:flex-start}.hide-sm{display:none}}
-@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+@media (prefers-reduced-motion:reduce){*:not(#ticker){animation:none!important} #ticker{animation-duration:70s}}
 </style>
 </head>
 <body>
