@@ -90,6 +90,13 @@ EFFORT_RE = re.compile(r"Block solved after \d+ shares at ([\d.]+)% diff", re.I)
 TS_RE = re.compile(r"^\[?(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d:\d\d)")
 
 
+DEFAULT_RIG = "MikeyRocks"   # shown when a block has no rig name
+
+
+def rig_or_default(rig):
+    return rig if rig and str(rig).strip().lower() not in ("—", "-", "unnamed", "unknown", "null", "none") else DEFAULT_RIG
+
+
 def rig_name(worker):
     """'bc1q...addr.RigName' -> 'RigName' (never publish the address)."""
     return (worker.split(".", 1)[1] if "." in worker else "unnamed")[:32]
@@ -220,7 +227,7 @@ def alert_block(key, cfg, b):
     coin = cfg["coin"]
     stats = rpc(cfg, "getblockstats", str(b["height"]), '["subsidy","totalfee"]') or {}
     reward = (stats.get("subsidy") or ((50 * 100_000_000) >> (b["height"] // 210_000))) + (stats.get("totalfee") or 0)
-    parts = [f"Rig: {b['rig']}"]
+    parts = [f"Rig: {rig_or_default(b['rig'])}"]
     if b.get("diff"):
         parts.append(f"Diff: {fmt_si(b['diff'])}")
     if b.get("effort") is not None:

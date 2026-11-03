@@ -436,6 +436,7 @@ function rewardHTML(key, rw){
     <div class="rs">${coinAmt(rw.subsidy_sats)} subsidy + ${rw.fees_sats!=null?coinAmt(rw.fees_sats):"?"} fees${px?` · ${C} ${usd(px)}`:""}${rw.live?"":" · fees unavailable"}</div>`;
 }
 const rigBest = w => ("bestround" in w) ? (w.bestround ? sh(w.bestround) : "—") : sh(w.bestever??w.bestshare);
+const rigOf = r => (!r || ["—","-","unnamed","unknown","null","none"].includes(String(r).trim().toLowerCase())) ? "MikeyRocks" : r;
 const effCls = e => e<=100 ? "lucky" : "unlucky";
 function renderBlocks(pools){
   const all=[]; for(const k of ["btc","bch"]) for(const b of (pools[k]?.blocks||[])) all.push({...b, coin:k});
@@ -445,7 +446,7 @@ function renderBlocks(pools){
     lb.className="lastblock"; lb.style.setProperty("--c", b.coin==="btc"?"var(--btc)":"var(--bch)");
     lb.innerHTML=`<div class="trophy">🏆</div>
       <div><div class="lb-k">Last block found</div><div class="lb-main"><span class="coinc">${b.coin.toUpperCase()}</span> #${b.height!=null?num(b.height):"?"}</div></div>
-      <div class="lb-f"><div class="k">Rig</div><div class="v rig">${esc(b.rig)}</div></div>
+      <div class="lb-f"><div class="k">Rig</div><div class="v rig">${esc(rigOf(b.rig))}</div></div>
       <div class="lb-f"><div class="k">Date hit</div><div class="v">${fmtDate(b.time)}</div></div>
       <div class="lb-f"><div class="k">Ago</div><div class="v">${ago(b.time)}</div></div>
       ${b.diff?`<div class="lb-f"><div class="k">Share diff</div><div class="v">${sh(b.diff)}</div></div>`:""}
@@ -456,7 +457,7 @@ function renderBlocks(pools){
   }
   const expanded = $("#history").dataset.expanded==="1";
   $("#history").innerHTML = all.length ? `<table class="ht${expanded?"":" collapsed"}"><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th><th>Share diff</th><th>Effort</th></tr></thead><tbody>${
-    all.map(b=>`<tr><td class="h-coin"><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td class="h-blk">${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td class="h-date">${fmtDate(b.time)}</td><td class="h-rig">${esc(b.rig)}</td><td class="h-diff">${b.diff?sh(b.diff):"—"}</td><td class="h-eff ${b.effort!=null?effCls(b.effort):""}">${b.effort!=null?b.effort.toFixed(1)+"%":"—"}</td></tr>`).join("")
+    all.map(b=>`<tr><td class="h-coin"><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td class="h-blk">${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td class="h-date">${fmtDate(b.time)}</td><td class="h-rig">${esc(rigOf(b.rig))}</td><td class="h-diff">${b.diff?sh(b.diff):"—"}</td><td class="h-eff ${b.effort!=null?effCls(b.effort):""}">${b.effort!=null?b.effort.toFixed(1)+"%":"—"}</td></tr>`).join("")
   }</tbody></table>${all.length>8?`<button class="more" id="moreBtn">${expanded?"Show fewer":`Show all ${all.length} blocks`}</button>`:""}` : `<div class="empty">No blocks found yet. When a rig hits one, it lands here with block #, date and rig name.</div>`;
   const mb=$("#moreBtn"); if(mb) mb.onclick=()=>{ const h=$("#history"); h.dataset.expanded = h.dataset.expanded==="1"?"0":"1"; renderBlocks(pools); };
 }
