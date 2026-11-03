@@ -121,6 +121,15 @@ def parse_blocks(text):
     return out
 
 
+def read_app_blocks(cfg):
+    try:
+        d = json.loads((cfg["pooldir"].parent.parent / "ui" / "state" / "blocks_state.json").read_text())
+    except Exception:
+        return []
+    ev = d.get("events") if isinstance(d, dict) else d
+    return [e for e in (ev or []) if isinstance(e, dict)]
+
+
 def block_history(key, cfg, state):
     """Permanent list of blocks found, read from ckpool.log. Only new bytes are read each run;
     the list lives in the local state file so it survives log rotation and app restarts."""
@@ -160,6 +169,25 @@ def block_history(key, cfg, state):
                             x["diff"] = b.get("diff")
     except FileNotFoundError:
         pass
+
+    # merge the app's own block record (it also finds blocks by scanning the chain for our payouts)
+    known = {b["height"]: b for b in st["blocks"]}
+    for e in read_app_blocks(cfg):
+        h = e.get("height")
+        if not isinstance(h, int) or (isinstance(e.get("confirmations"), int) and e["confirmations"] < 0):
+            continue                                   # skip malformed / orphaned
+        w = str(e.get("solve_worker") or "")
+        rig = rig_name(w) if "." in w else None
+        diff = None if e.get("source") == "backscan" else e.get("solve_diff")   # backscan diff is a placeholder
+        if h not in known:
+            b = {"height": h, "time": int(e.get("t") or time.time()), "rig": rig or "—", "effort": None, "diff": diff}
+            st["blocks"].append(b); known[h] = b; new.append(b)
+        else:
+            b = known[h]
+            if rig and b.get("rig") in (None, "—", "unnamed", "unknown"):
+                b["rig"] = rig
+            if b.get("diff") is None and diff:
+                b["diff"] = diff
     st["blocks"].sort(key=lambda b: b["time"], reverse=True)
     return st["blocks"], new
 
