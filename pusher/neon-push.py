@@ -6,7 +6,7 @@ sanitized, read-only stats.json to a GitHub branch. Nothing is exposed inbound.
 Runs as root (needs docker + the app-data folders). Python stdlib only.
 Config: /home/umbrel/neon-solo/config.env   (see install.sh)
 """
-import json, os, re, subprocess, sys, time, base64, urllib.request, urllib.error
+import calendar, json, os, re, subprocess, sys, time, base64, urllib.request, urllib.error
 from pathlib import Path
 
 HOME = Path(os.environ.get("NEON_HOME", "/home/umbrel/neon-solo"))
@@ -29,6 +29,7 @@ POOLS = {
     },
 }
 HISTORY_SECS = 24 * 3600
+OFFLINE_SECS = 10 * 60
 UNITS = {"": 1, "K": 1e3, "M": 1e6, "G": 1e9, "T": 1e12, "P": 1e15, "E": 1e18, "Z": 1e21}
 
 
@@ -83,22 +84,54 @@ def rpc(cfg, *args):
         return None
 
 
-def blocks_found(key, cfg, state):
-    """Count blocks ckpool reports as solved. Reads only log lines since the last run;
-    the running total is kept in the local state file (best effort)."""
-    st = state.setdefault("_blocks", {}).setdefault(key, {"count": 0, "since": None})
+SOLVED_RE = re.compile(r"Solved and confirmed block (\d+) by (\S+)", re.I)
+ACCEPTED_RE = re.compile(r"BLOCK ACCEPTED", re.I)
+TS_RE = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)")
+
+
+def rig_name(worker):
+    """'bc1q...addr.RigName' -> 'RigName' (never publish the address)."""
+    return (worker.split(".", 1)[1] if "." in worker else "unnamed")[:32]
+
+
+def parse_blocks(text):
+    """Return [{height, time, rig}] for each block ckpool says it solved."""
+    out, pending = [], None
+    for line in text.splitlines():
+        m = TS_RE.match(line)
+        ts = calendar.timegm(time.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S")) if m else int(time.time())
+        s = SOLVED_RE.search(line)
+        if s:
+            out.append({"height": int(s.group(1)), "time": ts, "rig": rig_name(s.group(2))})
+            pending = None
+        elif ACCEPTED_RE.search(line):
+            pending = ts          # accepted but no "solved by" line (yet)
+    if pending and not out:
+        out.append({"height": None, "time": pending, "rig": "unknown"})
+    return out
+
+
+def block_history(key, cfg, state):
+    """Keep a permanent list of blocks found. Only reads log lines since the last run;
+    the list lives in the local state file so it survives ckpool restarts."""
+    st = state.setdefault("_blockhist", {}).setdefault(key, {"since": None, "blocks": []})
     now = int(time.time())
-    cmd = ["docker", "logs", cfg["ckpool_container"]]
+    cmd = ["docker", "logs", "--timestamps", cfg["ckpool_container"]]
     if st["since"]:
         cmd[2:2] = ["--since", str(st["since"])]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         if r.returncode == 0:
-            st["count"] += len(re.findall(r"BLOCK ACCEPTED|Solved and confirmed block", r.stdout + r.stderr, re.I))
+            seen = {(b["height"], b["time"] // 600) for b in st["blocks"]}
+            for b in parse_blocks(r.stdout + r.stderr):
+                if (b["height"], b["time"] // 600) not in seen and not any(
+                        b["height"] and b["height"] == x["height"] for x in st["blocks"]):
+                    st["blocks"].append(b)
             st["since"] = now
     except Exception:
         pass
-    return st["count"]
+    st["blocks"].sort(key=lambda b: b["time"], reverse=True)
+    return st["blocks"]
 
 
 def collect(key, cfg, history):
@@ -141,16 +174,17 @@ def collect(key, cfg, history):
             payout = payout or mask(uf.name)
             bestever = max(bestever, u.get("bestever") or 0)
             for w in u.get("worker", []):
-                name = w.get("workername", "")
-                name = name.split(".", 1)[1] if "." in name else "default"   # strip the address part
-                workers.append({"name": name[:32],
+                workers.append({"name": rig_name(w.get("workername", "")),
                                 "hashrate1m": hr(w.get("hashrate1m")), "hashrate5m": hr(w.get("hashrate5m")),
                                 "hashrate1h": hr(w.get("hashrate1hr")), "hashrate1d": hr(w.get("hashrate1d")),
                                 "lastshare": w.get("lastshare"), "bestshare": w.get("bestshare"),
                                 "bestever": w.get("bestever")})
     pool["bestever"] = max(bestever, pool.get("bestshare") or 0) or None
-    workers.sort(key=lambda w: -(w["hashrate5m"] or 0))
-    out.update(pool=pool, workers=workers, payout=payout, blocks_found=blocks_found(key, cfg, history))
+    workers.sort(key=lambda w: (-(w["hashrate5m"] or 0)))
+    blocks = block_history(key, cfg, history)
+    for w in workers:
+        w["online"] = bool(w["lastshare"]) and now - w["lastshare"] < OFFLINE_SECS
+    out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks))
 
     # --- history (local file, last 24h of 5m hashrate) ---
     h = [p for p in history.get(key, []) if p[0] > now - HISTORY_SECS]
@@ -204,6 +238,7 @@ def main():
         if env.get(f"NEON_SKIP_{key.upper()}") == "1":
             continue
         data["pools"][key] = collect(key, cfg, history)
+    history.pop("_blocks", None)   # old counter format
     hist_file.write_text(json.dumps(history))
     content = json.dumps(data, separators=(",", ":"))
     (HOME / "stats.json").write_text(content)
