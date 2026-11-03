@@ -236,8 +236,14 @@ table.wt td.meta{display:none}
   table.ht .h-rig{grid-area:rig;text-align:right;font-size:12px;color:var(--yel)}
   table.ht .h-diff{grid-area:diff;font-size:11.5px;color:var(--dim)}
   table.ht .h-diff::before{content:"share diff "}
-  .hscroll{max-height:420px}
+  .hscroll{max-height:none;overflow:visible}
+  html,body,.hscroll{scrollbar-width:none;-ms-overflow-style:none}
+  html::-webkit-scrollbar,body::-webkit-scrollbar,.hscroll::-webkit-scrollbar{display:none;width:0;height:0}
+  table.ht.collapsed tr:nth-child(n+9){display:none}
+  .history .more{display:block}
 }
+.more{display:none;width:100%;margin-top:12px;padding:10px;background:#0006;border:1px solid #ff2bd666;color:#ffd0f4;
+  font:600 11px "JetBrains Mono",monospace;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}
 
 @media (max-width:980px){.pools{grid-template-columns:1fr}.totals{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,1fr)}.status{align-items:flex-start}.hide-sm{display:none}}
@@ -447,9 +453,11 @@ function renderBlocks(pools){
     lb.className="lastblock none";
     lb.innerHTML=`<div><div class="lb-k">Last block found</div><div class="lb-main">None yet — still hunting</div></div>`;
   }
-  $("#history").innerHTML = all.length ? `<table class="ht"><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th><th>Share diff</th><th>Effort</th></tr></thead><tbody>${
+  const expanded = $("#history").dataset.expanded==="1";
+  $("#history").innerHTML = all.length ? `<table class="ht${expanded?"":" collapsed"}"><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th><th>Share diff</th><th>Effort</th></tr></thead><tbody>${
     all.map(b=>`<tr><td class="h-coin"><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td class="h-blk">${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td class="h-date">${fmtDate(b.time)}</td><td class="h-rig">${esc(b.rig)}</td><td class="h-diff">${b.diff?sh(b.diff):"—"}</td><td class="h-eff ${b.effort!=null?effCls(b.effort):""}">${b.effort!=null?b.effort.toFixed(1)+"%":"—"}</td></tr>`).join("")
-  }</tbody></table>` : `<div class="empty">No blocks found yet. When a rig hits one, it lands here with block #, date and rig name.</div>`;
+  }</tbody></table>${all.length>8?`<button class="more" id="moreBtn">${expanded?"Show fewer":`Show all ${all.length} blocks`}</button>`:""}` : `<div class="empty">No blocks found yet. When a rig hits one, it lands here with block #, date and rig name.</div>`;
+  const mb=$("#moreBtn"); if(mb) mb.onclick=()=>{ const h=$("#history"); h.dataset.expanded = h.dataset.expanded==="1"?"0":"1"; renderBlocks(pools); };
 }
 const esc = s => String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
