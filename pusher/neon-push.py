@@ -203,8 +203,40 @@ def alert_block(key, cfg, b):
     print(f"block alert {coin} #{b['height']}: {res}")
 
 
+def find_dicts(obj, key):
+    """All dicts anywhere inside obj that contain `key`."""
+    if isinstance(obj, dict):
+        if key in obj:
+            yield obj
+        for v in obj.values():
+            yield from find_dicts(v, key)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from find_dicts(v, key)
+
+
+def read_app(cfg):
+    """The AxeBTC/AxeBCH app keeps its own best shares (these follow the app's 'reset best share' button).
+    Returns (pool dict, {rig: best since reset}) or ({}, {}) if the app files aren't there."""
+    sdir = cfg["pooldir"].parent.parent / "ui" / "state"
+    pool, rigs = {}, {}
+    try:
+        pool = json.loads((sdir / "pool_cache.json").read_text()).get("pool") or {}
+    except Exception:
+        pass
+    for fname in ("pool_cache.json", "pool_workers_cache.json"):
+        try:
+            data = json.loads((sdir / fname).read_text())
+        except Exception:
+            continue
+        for d in find_dicts(data, "workername"):
+            if "bestshare_since_block" in d:
+                rigs.setdefault(rig_name(str(d["workername"])), d["bestshare_since_block"])
+    return pool, rigs
+
+
 def watch_rigs(key, cfg, workers, state, now):
-    """Alert on: a rig beating its best-ever share, a rig going offline (>10 min), and coming back."""
+    """Alert on a rig going offline (>10 min) and coming back."""
     rigs = state.setdefault("_rigs", {}).setdefault(key, {})
     first_run = not rigs
     seen = set()
@@ -216,10 +248,6 @@ def watch_rigs(key, cfg, workers, state, now):
         if r is None:
             rigs[name] = {"online": online, "best": best}
             continue
-        if not first_run and best > r["best"] > 0:
-            push_alert(f"🎯 NEW BEST DIFF · {cfg['coin']} · {name}",
-                       f"{name} hit {fmt_si(best)} (previous best {fmt_si(r['best'])})",
-                       tag=f"best-{key}-{name}", kind="bestdiff")
         if r["online"] and not online:
             push_alert(f"📴 RIG OFFLINE · {cfg['coin']} · {name}",
                        f"No shares from {name} for 10+ min (last share {(now - w['lastshare']) // 60} min ago)" if w.get("lastshare") else f"No shares from {name} for 10+ min",
@@ -290,13 +318,36 @@ def collect(key, cfg, history):
                                 "hashrate1h": hr(w.get("hashrate1hr")), "hashrate1d": hr(w.get("hashrate1d")),
                                 "lastshare": w.get("lastshare"), "bestshare": w.get("bestshare"),
                                 "bestever": w.get("bestever")})
-    # round best: ckpool's pool figure, or the best share of a rig hashing right now
-    # (saved per-user/offline-rig values can be stale, e.g. the share that found the last block)
-    now_ = int(time.time())
-    rig_best = max((w.get("bestshare") or 0 for w in workers
-                    if w.get("lastshare") and now_ - w["lastshare"] < OFFLINE_SECS), default=0)
-    pool["bestshare"] = int(max(pool.get("bestshare") or 0, rig_best)) or 0
-    pool["bestever"] = max(bestever, pool["bestshare"]) or None
+    app, app_rigs = read_app(cfg)
+    if app:
+        # match the app: its round best follows the "reset best share" button
+        rb = app.get("best_share_since_block") if "best_share_since_block" in app else app.get("best_share")
+        rig = app.get("best_share_since_block_worker") or app.get("best_share_worker")
+        pool["bestshare"] = int(rb or 0)
+        pool["bestshare_rig"] = rig_name(rig) if rig and "." in rig else (rig or None)
+        pool["bestever"] = int(app.get("best_share_all_time") or bestever or 0) or None
+        for w in workers:
+            if app_rigs:
+                v = app_rigs.get(w["name"])
+                w["bestround"] = int(v) if v else None
+            elif pool["bestshare_rig"] and w["name"].lower() == pool["bestshare_rig"].lower():
+                w["bestround"] = pool["bestshare"]   # app only reports the pool's top rig
+    else:
+        # no app files: ckpool's pool figure, or the best share of a rig hashing right now
+        rig_best = max((w.get("bestshare") or 0 for w in workers
+                        if w.get("lastshare") and now - w["lastshare"] < OFFLINE_SECS), default=0)
+        pool["bestshare"] = int(max(pool.get("bestshare") or 0, rig_best)) or 0
+        pool["bestever"] = max(bestever, pool["bestshare"]) or None
+
+    # 🎯 alert when the pool's round best goes up (a reset lowers it silently)
+    rbst = history.setdefault("_roundbest", {})
+    prev, cur = rbst.get(key), pool["bestshare"] or 0
+    if prev is not None and cur > prev > 0:
+        who = pool.get("bestshare_rig") or "a rig"
+        push_alert(f"🎯 NEW BEST DIFF · {cfg['coin']} · {who}",
+                   f"{who} hit {fmt_si(cur)}, new best since block (was {fmt_si(prev)})",
+                   tag=f"best-{key}", kind="bestdiff")
+    rbst[key] = cur
     workers.sort(key=lambda w: (-(w["hashrate5m"] or 0)))
     blocks, new_blocks = block_history(key, cfg, history)
     watch_rigs(key, cfg, workers, history, now)

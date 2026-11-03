@@ -317,7 +317,7 @@ table.wt td.meta{display:none}
       <div class="cell"><div class="k">1h avg</div><div class="v" data-f="hr1h"></div></div>
       <div class="cell"><div class="k">24h avg</div><div class="v" data-f="hr1d"></div></div>
       <div class="cell"><div class="k">Rigs online</div><div class="v c" data-f="workers"></div></div>
-      <div class="cell"><div class="k">Best (round)</div><div class="v" data-f="best"></div></div>
+      <div class="cell"><div class="k">Best since block</div><div class="v" data-f="best"></div></div>
       <div class="cell"><div class="k">Best ever</div><div class="v c" data-f="bestever"></div></div>
       <div class="cell"><div class="k">Payout</div><div class="v" data-f="payout"></div></div>
     </div>
@@ -396,7 +396,7 @@ function renderPool(key, p, now){
   f("reward").innerHTML = rewardHTML(key, p.reward);
   f("hr1h").textContent=hs(hr["1h"]); f("hr1d").textContent=hs(hr["1d"]);
   f("workers").textContent=num((p.workers||[]).filter(w=>isOn(w,now)).length);
-  if(pool.bestshare>0) f("best").textContent=sh(pool.bestshare);
+  if(pool.bestshare>0) f("best").innerHTML=`${sh(pool.bestshare)}${pool.bestshare_rig?` <span style="font-size:11px;color:var(--dim);font-weight:400">by ${esc(pool.bestshare_rig)}</span>`:""}`;
   else f("best").innerHTML='— <span style="font-size:11px;color:var(--dim);font-weight:400">no shares this round</span>'; f("bestever").textContent=sh(pool.bestever);
   f("payout").textContent=p.payout||"—";
   f("height").textContent=num(node.blocks);
@@ -412,7 +412,7 @@ function renderPool(key, p, now){
   const ws = (p.workers||[]).filter(w=>isOn(w,now));
   ws.sort((a,b)=> String(a.name).localeCompare(String(b.name), undefined, {numeric:true, sensitivity:"base"}));
   f("wtable").innerHTML = ws.length ? `<table class="wt"><thead><tr><th>Worker</th><th>5m</th><th>1h</th><th>Best</th><th>Last share</th></tr></thead><tbody>${
-    ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td class="c-hr">${hs(w.hashrate5m??w.hashrate1m)}</td><td class="c-1h">${hs(w.hashrate1h)}</td><td class="c-best">${sh(w.bestever??w.bestshare)}</td><td class="c-last on">${ago(w.lastshare)}</td><td class="meta">best <b>${sh(w.bestever??w.bestshare)}</b> · 1h ${hs(w.hashrate1h)}</td></tr>`).join("")
+    ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td class="c-hr">${hs(w.hashrate5m??w.hashrate1m)}</td><td class="c-1h">${hs(w.hashrate1h)}</td><td class="c-best">${rigBest(w)}</td><td class="c-last on">${ago(w.lastshare)}</td><td class="meta">best <b>${rigBest(w)}</b> · 1h ${hs(w.hashrate1h)}</td></tr>`).join("")
   }</tbody></table>` : `<div class="empty">no rigs hashing right now</div>`;
   return [el, () => drawChart(f("chart"), p.history, color)];
 }
@@ -435,6 +435,7 @@ function rewardHTML(key, rw){
     ${px?`<div class="usd">≈ ${usd(rw.total_sats/1e8*px)}</div>`:""}
     <div class="rs">${coinAmt(rw.subsidy_sats)} subsidy + ${rw.fees_sats!=null?coinAmt(rw.fees_sats):"?"} fees${px?` · ${C} ${usd(px)}`:""}${rw.live?"":" · fees unavailable"}</div>`;
 }
+const rigBest = w => ("bestround" in w) ? (w.bestround ? sh(w.bestround) : "—") : sh(w.bestever??w.bestshare);
 const effCls = e => e<=100 ? "lucky" : "unlucky";
 function renderBlocks(pools){
   const all=[]; for(const k of ["btc","bch"]) for(const b of (pools[k]?.blocks||[])) all.push({...b, coin:k});
