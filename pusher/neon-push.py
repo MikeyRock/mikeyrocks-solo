@@ -18,14 +18,12 @@ POOLS = {
         "pooldir": APPDATA / "willitmod-btc/data/pool/www",
         "container": "willitmod-btc_bitcoind_1",
         "cli": ["bitcoin-cli", "-datadir=/data"],
-        "ckpool_container": "willitmod-btc_ckpool_1",
     },
     "bch": {
         "name": "AxeBCH", "coin": "BCH",
         "pooldir": APPDATA / "willitmod-dev-bch/data/pool/www",
         "container": "willitmod-dev-bch_bchn_1",
         "cli": ["bitcoin-cli", "-datadir=/data"],
-        "ckpool_container": "willitmod-dev-bch_ckpool_1",
     },
 }
 HISTORY_SECS = 24 * 3600
@@ -85,8 +83,8 @@ def rpc(cfg, *args):
 
 
 SOLVED_RE = re.compile(r"Solved and confirmed block (\d+) by (\S+)", re.I)
-ACCEPTED_RE = re.compile(r"BLOCK ACCEPTED", re.I)
-TS_RE = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)")
+EFFORT_RE = re.compile(r"Block solved after \d+ shares at ([\d.]+)% diff", re.I)
+TS_RE = re.compile(r"^\[?(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d:\d\d)")
 
 
 def rig_name(worker):
@@ -95,40 +93,56 @@ def rig_name(worker):
 
 
 def parse_blocks(text):
-    """Return [{height, time, rig}] for each block ckpool says it solved."""
-    out, pending = [], None
+    """Return [{height, time, rig, effort}] for each block in ckpool.log text.
+    ckpool.log timestamps are UTC: '[2026-10-22 06:27:22.094] Solved and confirmed block 973980 by addr.RIG'"""
+    out = []
     for line in text.splitlines():
         m = TS_RE.match(line)
-        ts = calendar.timegm(time.strptime(m.group(1), "%Y-%m-%dT%H:%M:%S")) if m else int(time.time())
+        ts = calendar.timegm(time.strptime(m.group(1) + " " + m.group(2), "%Y-%m-%d %H:%M:%S")) if m else int(time.time())
         s = SOLVED_RE.search(line)
         if s:
-            out.append({"height": int(s.group(1)), "time": ts, "rig": rig_name(s.group(2))})
-            pending = None
-        elif ACCEPTED_RE.search(line):
-            pending = ts          # accepted but no "solved by" line (yet)
-    if pending and not out:
-        out.append({"height": None, "time": pending, "rig": "unknown"})
+            out.append({"height": int(s.group(1)), "time": ts, "rig": rig_name(s.group(2)), "effort": None})
+            continue
+        e = EFFORT_RE.search(line)
+        if e:
+            if out and out[-1]["effort"] is None:
+                out[-1]["effort"] = float(e.group(1))
+            elif not out:   # effort line arrived in a later read than its block line
+                out.append({"height": None, "time": ts, "rig": None, "effort": float(e.group(1))})
     return out
 
 
 def block_history(key, cfg, state):
-    """Keep a permanent list of blocks found. Only reads log lines since the last run;
-    the list lives in the local state file so it survives ckpool restarts."""
-    st = state.setdefault("_blockhist", {}).setdefault(key, {"since": None, "blocks": []})
-    now = int(time.time())
-    cmd = ["docker", "logs", "--timestamps", cfg["ckpool_container"]]
-    if st["since"]:
-        cmd[2:2] = ["--since", str(st["since"])]
+    """Permanent list of blocks found, read from ckpool.log. Only new bytes are read each run;
+    the list lives in the local state file so it survives log rotation and app restarts."""
+    st = state.setdefault("_blockhist", {}).setdefault(key, {"offset": 0, "blocks": []})
+    st.pop("since", None)
+    log = cfg["pooldir"] / "ckpool.log"
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if r.returncode == 0:
-            seen = {(b["height"], b["time"] // 600) for b in st["blocks"]}
-            for b in parse_blocks(r.stdout + r.stderr):
-                if (b["height"], b["time"] // 600) not in seen and not any(
-                        b["height"] and b["height"] == x["height"] for x in st["blocks"]):
-                    st["blocks"].append(b)
-            st["since"] = now
-    except Exception:
+        size = log.stat().st_size
+        if size < st.get("offset", 0):          # log was rotated / truncated
+            st["offset"] = 0
+        with open(log, "rb") as fh:
+            fh.seek(st.get("offset", 0))
+            chunk = fh.read()
+        # don't split a line: stop at the last newline
+        cut = chunk.rfind(b"\n") + 1
+        st["offset"] = st.get("offset", 0) + cut
+        known = {b["height"] for b in st["blocks"]}
+        for b in parse_blocks(chunk[:cut].decode("utf-8", "replace")):
+            if b["height"] is None:
+                last = max(st["blocks"], key=lambda x: x["time"], default=None)
+                if last and last.get("effort") is None:
+                    last["effort"] = b["effort"]
+                continue
+            if b["height"] not in known:
+                st["blocks"].append(b)
+                known.add(b["height"])
+            elif b["effort"] is not None:
+                for x in st["blocks"]:
+                    if x["height"] == b["height"] and x.get("effort") is None:
+                        x["effort"] = b["effort"]
+    except FileNotFoundError:
         pass
     st["blocks"].sort(key=lambda b: b["time"], reverse=True)
     return st["blocks"]

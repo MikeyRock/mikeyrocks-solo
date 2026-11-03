@@ -144,6 +144,7 @@ tr.offline td.wname::before{color:var(--red)}
 .hscroll::-webkit-scrollbar{width:6px} .hscroll::-webkit-scrollbar-thumb{background:var(--mag)}
 .hscroll thead th{position:sticky;top:0;background:#0b0e17}
 .hscroll td a{color:var(--cyan);text-decoration:none}
+.lucky{color:var(--grn)!important} .unlucky{color:#ff9db0!important}
 .cb{font-weight:800;letter-spacing:.1em} .cb.btc{color:var(--btc)} .cb.bch{color:var(--bch)}
 
 @media (max-width:980px){.pools{grid-template-columns:1fr}.totals{grid-template-columns:repeat(2,1fr)}}
@@ -304,6 +305,7 @@ const OFFLINE_SECS = 600;
 const isOn = (w,now) => !!w.lastshare && now - w.lastshare < OFFLINE_SECS;
 const EXPLORER = {btc: h=>`https://mempool.space/block/${h}`, bch: h=>`https://blockchair.com/bitcoin-cash/block/${h}`};
 const fmtDate = t => new Date(t*1000).toLocaleString(undefined,{year:"numeric",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+const effCls = e => e<=100 ? "lucky" : "unlucky";
 function renderBlocks(pools){
   const all=[]; for(const k of ["btc","bch"]) for(const b of (pools[k]?.blocks||[])) all.push({...b, coin:k});
   all.sort((a,b)=>b.time-a.time);
@@ -314,13 +316,14 @@ function renderBlocks(pools){
       <div><div class="lb-k">Last block found</div><div class="lb-main"><span class="coinc">${b.coin.toUpperCase()}</span> #${b.height!=null?num(b.height):"?"}</div></div>
       <div class="lb-f"><div class="k">Rig</div><div class="v rig">${esc(b.rig)}</div></div>
       <div class="lb-f"><div class="k">Date hit</div><div class="v">${fmtDate(b.time)}</div></div>
-      <div class="lb-f"><div class="k">Ago</div><div class="v">${ago(b.time)}</div></div>`;
+      <div class="lb-f"><div class="k">Ago</div><div class="v">${ago(b.time)}</div></div>
+      ${b.effort!=null?`<div class="lb-f"><div class="k">Effort</div><div class="v ${effCls(b.effort)}">${b.effort.toFixed(1)}%</div></div>`:""}`;
   } else {
     lb.className="lastblock none";
     lb.innerHTML=`<div><div class="lb-k">Last block found</div><div class="lb-main">None yet — still hunting</div></div>`;
   }
-  $("#history").innerHTML = all.length ? `<table><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th></tr></thead><tbody>${
-    all.map(b=>`<tr><td><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td>${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td>${fmtDate(b.time)}</td><td>${esc(b.rig)}</td></tr>`).join("")
+  $("#history").innerHTML = all.length ? `<table><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th><th>Effort</th></tr></thead><tbody>${
+    all.map(b=>`<tr><td><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td>${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td>${fmtDate(b.time)}</td><td>${esc(b.rig)}</td><td class="${b.effort!=null?effCls(b.effort):""}">${b.effort!=null?b.effort.toFixed(1)+"%":"—"}</td></tr>`).join("")
   }</tbody></table>` : `<div class="empty">No blocks found yet. When a rig hits one, it lands here with block #, date and rig name.</div>`;
 }
 const esc = s => String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -357,9 +360,9 @@ function demoData(){
       node:{blocks:974289,headers:974289,synced:true,progress:1,peers:10,difficulty:1.48e14,subversion:"/Satoshi:30.0.0/"},
       pool:{workers:9,hashrate:{"1m":8.6e13,"5m":8.597e13,"1h":8.4e13,"1d":8.3e13},bestshare:2.1e9,bestever:4.7e10},
       workers:[{name:"bitaxe-01",hashrate5m:1.2e12,hashrate1h:1.1e12,lastshare:now-12,bestever:3.3e9},{name:"nerdqaxe-02",hashrate5m:4.8e12,hashrate1h:4.7e12,lastshare:now-4,bestever:4.7e10}],
-      blocks:[{height:974400,time:now-3*86400,rig:"S19JPro"}],
+      blocks:[{height:974400,time:now-3*86400,rig:"S19JPro",effort:42.7}],
       history:hist(8.5e13)},
-    bch:{name:"AxeBCH",coin:"BCH",updated:now,payout:"bitcoincash:q…demo",blocks_found:1,blocks:[{height:921010,time:now-40*86400,rig:"AXE111"}],
+    bch:{name:"AxeBCH",coin:"BCH",updated:now,payout:"bitcoincash:q…demo",blocks_found:1,blocks:[{height:973981,time:now-11*86400,rig:"LPRAY",effort:9.5},{height:973980,time:now-11*86400-690,rig:"LPRAY",effort:191.9}],
       node:{blocks:921000,headers:921000,synced:true,progress:1,peers:8,difficulty:6.1e11,subversion:"/Bitcoin Cash Node:29.0.0/"},
       pool:{workers:2,hashrate:{"1m":2.4e12,"5m":2.3e12,"1h":2.2e12,"1d":2.1e12},bestshare:9e8,bestever:6.2e9},
       workers:[{name:"bitaxe-bch",hashrate5m:1.2e12,hashrate1h:1.1e12,lastshare:now-30,bestever:6.2e9}],
