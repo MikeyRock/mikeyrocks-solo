@@ -31,3 +31,14 @@ To pause publishing, run `sudo systemctl disable --now mikeyrocks-solo.timer`.
 To hide one pool, add `NEON_SKIP_BCH=1` (or `NEON_SKIP_BTC=1`) to `/home/umbrel/mikeyrocks-solo/config.env`.
 
 If the page shows **DEMO DATA**, it hasn't received a `stats.json` from the Umbrel yet.
+
+## Block alerts (push notifications)
+
+`worker/worker.js` is a Cloudflare Worker that stores subscribed devices and sends web-push alerts. The page's
+🔔 toggle subscribes a device, and the Umbrel script calls the Worker's `/notify` endpoint when a new block shows up in `ckpool.log`.
+
+- Bindings: KV namespace `SUBS`, secret `NOTIFY_TOKEN`, and optionally the variable `ALLOW_ORIGIN=https://mikeyrock.github.io`
+- Page: set `PUSH_API` in `index.html` to the Worker URL
+- Umbrel: add `NEON_PUSH_URL=` and `NEON_PUSH_TOKEN=` to `/home/umbrel/neon-solo/config.env`
+- Test: `sudo python3 /home/umbrel/neon-solo/neon-push.py --test-alert`
+- iPhone: Safari → Share → **Add to Home Screen**, open it from the home screen, then tap 🔔 (needs iOS 16.4+)

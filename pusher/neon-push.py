@@ -85,6 +85,7 @@ def rpc(cfg, *args):
 
 
 SOLVED_RE = re.compile(r"Solved and confirmed block (\d+) by (\S+)", re.I)
+DIFF_RE = re.compile(r"Possible block solve diff ([\d.]+)", re.I)
 EFFORT_RE = re.compile(r"Block solved after \d+ shares at ([\d.]+)% diff", re.I)
 TS_RE = re.compile(r"^\[?(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d:\d\d)")
 
@@ -97,13 +98,19 @@ def rig_name(worker):
 def parse_blocks(text):
     """Return [{height, time, rig, effort}] for each block in ckpool.log text.
     ckpool.log timestamps are UTC: '[2026-10-22 06:27:22.094] Solved and confirmed block 973980 by addr.RIG'"""
-    out = []
+    out, last_diff = [], None
     for line in text.splitlines():
         m = TS_RE.match(line)
         ts = calendar.timegm(time.strptime(m.group(1) + " " + m.group(2), "%Y-%m-%d %H:%M:%S")) if m else int(time.time())
+        dm = DIFF_RE.search(line)
+        if dm:
+            last_diff = float(dm.group(1))
+            continue
         s = SOLVED_RE.search(line)
         if s:
-            out.append({"height": int(s.group(1)), "time": ts, "rig": rig_name(s.group(2)), "effort": None})
+            out.append({"height": int(s.group(1)), "time": ts, "rig": rig_name(s.group(2)), "effort": None,
+                        "diff": last_diff})
+            last_diff = None
             continue
         e = EFFORT_RE.search(line)
         if e:
@@ -119,6 +126,9 @@ def block_history(key, cfg, state):
     the list lives in the local state file so it survives log rotation and app restarts."""
     st = state.setdefault("_blockhist", {}).setdefault(key, {"offset": 0, "blocks": []})
     st.pop("since", None)
+    new = []
+    if any("diff" not in b for b in st["blocks"]):   # one-time re-read to backfill share diff
+        st["offset"] = 0
     log = cfg["pooldir"] / "ckpool.log"
     try:
         size = log.stat().st_size
@@ -140,14 +150,57 @@ def block_history(key, cfg, state):
             if b["height"] not in known:
                 st["blocks"].append(b)
                 known.add(b["height"])
-            elif b["effort"] is not None:
+                new.append(b)
+            else:
                 for x in st["blocks"]:
-                    if x["height"] == b["height"] and x.get("effort") is None:
-                        x["effort"] = b["effort"]
+                    if x["height"] == b["height"]:
+                        if x.get("effort") is None and b["effort"] is not None:
+                            x["effort"] = b["effort"]
+                        if x.get("diff") is None:
+                            x["diff"] = b.get("diff")
     except FileNotFoundError:
         pass
     st["blocks"].sort(key=lambda b: b["time"], reverse=True)
-    return st["blocks"]
+    return st["blocks"], new
+
+
+def fmt_si(n):
+    for u in ["", "K", "M", "G", "T", "P", "E"]:
+        if abs(n) < 1000:
+            return f"{n:.2f}{u}".replace(".00", "")
+        n /= 1000
+    return f"{n:.2f}Z"
+
+
+def push_alert(title, body, tag="block"):
+    env = load_env()
+    url, token = env.get("NEON_PUSH_URL"), env.get("NEON_PUSH_TOKEN")
+    if not url or not token:
+        return None
+    req = urllib.request.Request(url.rstrip("/") + "/notify", method="POST",
+                                 data=json.dumps({"title": title, "body": body, "tag": tag}).encode(),
+                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                                          "User-Agent": "mikeyrocks-solo-pusher"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read() or b"{}")
+    except Exception as e:
+        print(f"alert failed: {e}", file=sys.stderr)
+        return None
+
+
+def alert_block(key, cfg, b):
+    coin = cfg["coin"]
+    stats = rpc(cfg, "getblockstats", str(b["height"]), '["subsidy","totalfee"]') or {}
+    reward = (stats.get("subsidy") or ((50 * 100_000_000) >> (b["height"] // 210_000))) + (stats.get("totalfee") or 0)
+    parts = [f"Rig: {b['rig']}"]
+    if b.get("diff"):
+        parts.append(f"Diff: {fmt_si(b['diff'])}")
+    if b.get("effort") is not None:
+        parts.append(f"Effort: {b['effort']:.1f}%")
+    parts.append(f"Reward: {reward / 1e8:.4f} {coin}")
+    res = push_alert(f"⛏️ BLOCK FOUND! {coin} #{b['height']:,}", " · ".join(parts), tag=f"block-{key}-{b['height']}")
+    print(f"block alert {coin} #{b['height']}: {res}")
 
 
 def collect(key, cfg, history):
@@ -213,10 +266,15 @@ def collect(key, cfg, history):
     pool["bestshare"] = int(max(pool.get("bestshare") or 0, rig_best)) or 0
     pool["bestever"] = max(bestever, pool["bestshare"]) or None
     workers.sort(key=lambda w: (-(w["hashrate5m"] or 0)))
-    blocks = block_history(key, cfg, history)
+    blocks, new_blocks = block_history(key, cfg, history)
     # only publish rigs that submitted a share in the last 10 minutes
     workers = [w for w in workers if w["lastshare"] and now - w["lastshare"] < OFFLINE_SECS]
     out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks))
+
+    # --- push alert for blocks found since the last run (skip old ones from the first log read) ---
+    for b in new_blocks:
+        if now - b["time"] < 2 * 3600:
+            alert_block(key, cfg, b)
 
     # --- history (local file, last 24h of 5m hashrate) ---
     h = [p for p in history.get(key, []) if p[0] > now - HISTORY_SECS]
@@ -258,6 +316,11 @@ def publish(token, repo, branch, content):
 
 def main():
     env = load_env()
+    if "--test-alert" in sys.argv:
+        res = push_alert("🧪 TEST · BLOCK FOUND! BCH #000,000",
+                         "Rig: TEST-RIG · Diff: 1.81T · Effort: 9.5% · Reward: 3.1251 BCH — this is only a test", tag="test")
+        print("test alert:", res if res is not None else "not sent (check NEON_PUSH_URL / NEON_PUSH_TOKEN in config.env)")
+        return
     HOME.mkdir(parents=True, exist_ok=True)
     hist_file = HOME / "history.json"
     try:

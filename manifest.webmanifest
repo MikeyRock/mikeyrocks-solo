@@ -1,0 +1,15 @@
+{
+  "name": "MikeyRocks//Solo",
+  "short_name": "MikeySolo",
+  "description": "Live status and block alerts for my AxeBTC + AxeBCH solo pools.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#05060a",
+  "theme_color": "#05060a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
