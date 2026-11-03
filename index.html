@@ -462,7 +462,7 @@ load(); setInterval(load, REFRESH_MS);
 loadPrices(); setInterval(loadPrices, 5*60_000);
 
 /* ===== PUSH ALERTS (web push via Cloudflare Worker) ===== */
-const PUSH_API = "";   // e.g. "https://mikeyrocks-solo-push.<you>.workers.dev" — set after deploying the Worker
+const PUSH_API = "https://mikeyrocks-solo-push.seoxoner.workers.dev";
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
 const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const pushOK = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
