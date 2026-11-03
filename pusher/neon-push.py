@@ -122,9 +122,8 @@ def parse_blocks(text):
 
 
 def read_app_blocks(cfg):
-    try:
-        d = json.loads((cfg["pooldir"].parent.parent / "ui" / "state" / "blocks_state.json").read_text())
-    except Exception:
+    d = read_json_retry(cfg["pooldir"].parent.parent / "ui" / "state" / "blocks_state.json")
+    if d is None:
         return []
     ev = d.get("events") if isinstance(d, dict) else d
     return [e for e in (ev or []) if isinstance(e, dict)]
@@ -231,6 +230,18 @@ def alert_block(key, cfg, b):
     print(f"block alert {coin} #{b['height']}: {res}")
 
 
+def read_json_retry(path, tries=4):
+    """Read a JSON file another program is rewriting; retry if we catch it half-written."""
+    for i in range(tries):
+        try:
+            return json.loads(Path(path).read_text())
+        except FileNotFoundError:
+            return None
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            time.sleep(0.25 * (i + 1))
+    return None
+
+
 def find_dicts(obj, key):
     """All dicts anywhere inside obj that contain `key`."""
     if isinstance(obj, dict):
@@ -248,14 +259,12 @@ def read_app(cfg):
     Returns (pool dict, {rig: best since reset}) or ({}, {}) if the app files aren't there."""
     sdir = cfg["pooldir"].parent.parent / "ui" / "state"
     pool, rigs = {}, {}
-    try:
-        pool = json.loads((sdir / "pool_cache.json").read_text()).get("pool") or {}
-    except Exception:
-        pass
+    pc = read_json_retry(sdir / "pool_cache.json")
+    if isinstance(pc, dict):
+        pool = pc.get("pool") or {}
     for fname in ("pool_cache.json", "pool_workers_cache.json"):
-        try:
-            data = json.loads((sdir / fname).read_text())
-        except Exception:
+        data = pc if fname == "pool_cache.json" else read_json_retry(sdir / fname)
+        if data is None:
             continue
         for d in find_dicts(data, "workername"):
             if "bestshare_since_block" in d:
@@ -419,14 +428,28 @@ def publish(token, repo, branch, content):
                    {"message": f"stats {time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())}", "tree": tree["sha"], "parents": []})
     if s != 201:
         raise SystemExit(f"commit failed {s}: {commit}")
-    s, r = gh(token, "PATCH", f"/repos/{repo}/git/refs/heads/{branch}", {"sha": commit["sha"], "force": True})
-    if s == 422 or s == 404:
-        s, r = gh(token, "POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": commit["sha"]})
+    for attempt in range(3):
+        s, r = gh(token, "PATCH", f"/repos/{repo}/git/refs/heads/{branch}", {"sha": commit["sha"], "force": True})
+        if s in (200, 201):
+            break
+        if s == 404 or (s == 422 and "does not exist" in str(r)):
+            s, r = gh(token, "POST", f"/repos/{repo}/git/refs", {"ref": f"refs/heads/{branch}", "sha": commit["sha"]})
+            break
+        time.sleep(2 * (attempt + 1))          # another upload was in flight; try again
     if s not in (200, 201):
         raise SystemExit(f"ref update failed {s}: {r}")
 
 
 def main():
+    import fcntl
+    HOME.mkdir(parents=True, exist_ok=True)
+    lock = open(HOME / "run.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        if "--test-alert" not in sys.argv:
+            print("another run is in progress; waiting for it")
+        fcntl.flock(lock, fcntl.LOCK_EX)        # wait our turn instead of colliding
     env = load_env()
     if "--test-alert" in sys.argv:
         res = push_alert("🧪 TEST · BLOCK FOUND! BCH #000,000",
