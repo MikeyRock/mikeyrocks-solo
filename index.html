@@ -309,7 +309,7 @@ function renderPool(key, p, now){
   f("sync").textContent = node.synced ? "100%" : (prog*100).toFixed(1)+"%";
   f("syncBar").style.width = (node.synced?100:prog*100)+"%";
   const ws = (p.workers||[]).filter(w=>isOn(w,now));
-  ws.sort((a,b)=> (b.hashrate5m||0)-(a.hashrate5m||0));
+  ws.sort((a,b)=> String(a.name).localeCompare(String(b.name), undefined, {numeric:true, sensitivity:"base"}));
   f("wtable").innerHTML = ws.length ? `<table><thead><tr><th>Worker</th><th>5m</th><th class="hide-sm">1h</th><th class="hide-sm">Best</th><th>Last share</th></tr></thead><tbody>${
     ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td>${hs(w.hashrate5m??w.hashrate1m)}</td><td class="hide-sm">${hs(w.hashrate1h)}</td><td class="hide-sm">${sh(w.bestever??w.bestshare)}</td><td class="on">${ago(w.lastshare)}</td></tr>`).join("")
   }</tbody></table>` : `<div class="empty">no rigs hashing right now</div>`;
