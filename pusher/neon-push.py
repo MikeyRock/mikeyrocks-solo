@@ -6,7 +6,7 @@ sanitized, read-only stats.json to a GitHub branch. Nothing is exposed inbound.
 Runs as root (needs docker + the app-data folders). Python stdlib only.
 Config: /home/umbrel/neon-solo/config.env   (see install.sh)
 """
-import calendar, json, os, re, subprocess, sys, time, base64, urllib.request, urllib.error
+import calendar, json, os, re, shutil, subprocess, sys, time, base64, urllib.request, urllib.error
 from pathlib import Path
 
 HOME = Path(os.environ.get("NEON_HOME", "/home/umbrel/neon-solo"))
@@ -189,6 +189,64 @@ def recent_shares(cfg, n=SHARES_PER_POOL):
             break
     out.sort(key=lambda x: x["t"], reverse=True)
     return out[:n]
+
+
+KEEP_SHARELOG_DAYS = 14
+CLEANUP_EVERY = 6 * 3600
+
+
+def round_start(cfg, blocks):
+    """When the current round began: the app's own record, else our newest block. None if unknown."""
+    sdir = cfg["pooldir"].parent.parent / "ui" / "state"
+    cands = []
+    pc = read_json_retry(sdir / "pool_cache.json") or {}
+    started = ((pc.get("pool") or {}).get("current_round") or {}).get("started")
+    if started:
+        try:
+            cands.append(calendar.timegm(time.strptime(started[:19], "%Y-%m-%dT%H:%M:%S")))
+        except ValueError:
+            pass
+    ps = read_json_retry(sdir / "pool_state.json") or {}
+    if isinstance(ps.get("round_reset_at"), (int, float)):
+        cands.append(int(ps["round_reset_at"]))
+    if blocks:
+        cands.append(blocks[0]["time"])
+    return max(cands) if cands else None
+
+
+def cleanup_sharelogs(key, cfg, blocks, state, now, dry_run=False):
+    """Delete ckpool sharelog folders (www/<8 hex>/) older than KEEP_SHARELOG_DAYS,
+    but never anything from the current round (the apps compute effort/luck from it)."""
+    last = state.setdefault("_cleanup", {}).get(key, 0)
+    if not dry_run and now - last < CLEANUP_EVERY:
+        return None
+    cutoff = now - KEEP_SHARELOG_DAYS * 86400
+    rs = round_start(cfg, blocks)
+    if rs:
+        cutoff = min(cutoff, rs - 3600)          # keep the whole current round (+1h margin)
+    removed, freed = 0, 0
+    try:
+        dirs = [d for d in cfg["pooldir"].iterdir() if d.is_dir() and re.fullmatch(r"[0-9a-f]{8}", d.name)]
+    except Exception:
+        dirs = []
+    newest = max(dirs, key=lambda d: d.stat().st_mtime, default=None)
+    for d in dirs:
+        try:
+            if d == newest or d.stat().st_mtime >= cutoff:
+                continue
+            size = sum(f.stat().st_size for f in d.iterdir() if f.is_file())
+            if not dry_run:
+                shutil.rmtree(d)
+            removed += 1; freed += size
+        except Exception:
+            continue
+    if not dry_run:
+        state["_cleanup"][key] = now
+    msg = (f"{'would delete' if dry_run else 'deleted'} {removed} sharelog folders ({freed / 1e6:.1f} MB) for {key}; "
+           f"keeping since {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(cutoff))}")
+    if removed or dry_run:
+        print(msg)
+    return msg
 
 
 def read_app_blocks(cfg):
@@ -462,6 +520,7 @@ def collect(key, cfg, history):
     workers = [w for w in workers if w["lastshare"] and now - w["lastshare"] < OFFLINE_SECS]
     out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks),
                shares=recent_shares(cfg))
+    cleanup_sharelogs(key, cfg, blocks, history, now, dry_run="--cleanup-dry-run" in sys.argv)
 
     # --- push alert for blocks found since the last run (skip old ones from the first log read) ---
     for b in new_blocks:
@@ -544,7 +603,7 @@ def main():
     content = json.dumps(data, separators=(",", ":"))
     (HOME / "stats.json").write_text(content)
 
-    if "--dry-run" in sys.argv:
+    if "--dry-run" in sys.argv or "--cleanup-dry-run" in sys.argv:
         print(json.dumps(data, indent=2)[:6000])
         return
     token, repo = env.get("GITHUB_TOKEN"), env.get("NEON_REPO")
