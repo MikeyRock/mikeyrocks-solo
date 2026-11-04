@@ -30,7 +30,7 @@ POOLS = {
 }
 HISTORY_SECS = 24 * 3600
 OFFLINE_SECS = 10 * 60
-RIG_BEST_COOLDOWN = 10 * 60   # at most one 🎯 alert per rig per 10 min
+RIG_BEST_COOLDOWN = 0   # alert on every new best (checked each run, i.e. every minute)
 UNITS = {"": 1, "K": 1e3, "M": 1e6, "G": 1e9, "T": 1e12, "P": 1e15, "E": 1e18, "Z": 1e21}
 
 
