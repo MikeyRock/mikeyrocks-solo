@@ -30,6 +30,7 @@ POOLS = {
 }
 HISTORY_SECS = 24 * 3600
 OFFLINE_SECS = 10 * 60
+RIG_BEST_COOLDOWN = 10 * 60   # at most one 🎯 alert per rig per 10 min
 UNITS = {"": 1, "K": 1e3, "M": 1e6, "G": 1e9, "T": 1e12, "P": 1e15, "E": 1e18, "Z": 1e21}
 
 
@@ -338,9 +339,11 @@ def push_alert(title, body, tag="block", kind="block"):
                                           "User-Agent": "mikeyrocks-solo-pusher"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read() or b"{}")
+            res = json.loads(r.read() or b"{}")
+            print(f"alert [{kind}] {title} -> {res}")
+            return res
     except Exception as e:
-        print(f"alert failed: {e}", file=sys.stderr)
+        print(f"alert failed [{kind}] {title}: {e}", file=sys.stderr)
         return None
 
 
@@ -504,15 +507,25 @@ def collect(key, cfg, history):
         pool["bestshare"] = int(max(pool.get("bestshare") or 0, rig_best)) or 0
         pool["bestever"] = max(bestever, pool["bestshare"]) or None
 
-    # 🎯 alert when the pool's round best goes up (a reset lowers it silently)
-    rbst = history.setdefault("_roundbest", {})
-    prev, cur = rbst.get(key), pool["bestshare"] or 0
-    if prev is not None and cur > prev > 0:
-        who = pool.get("bestshare_rig") or "a rig"
-        push_alert(f"🎯 NEW BEST DIFF · {cfg['coin']} · {who}",
-                   f"{who} hit {fmt_si(cur)}, new best since block (was {fmt_si(prev)})",
-                   tag=f"best-{key}", kind="bestdiff")
-    rbst[key] = cur
+    # 🎯 alert when any rig beats its own best since block/reset (a reset lowers it silently)
+    rigbest = history.setdefault("_rigbest", {}).setdefault(key, {})
+    pool_top = pool["bestshare"] or 0
+    for w in workers:
+        cur = w.get("bestround")
+        if cur is None and not app:
+            cur = w.get("bestshare")
+        if not cur:
+            continue
+        r = rigbest.setdefault(w["name"], {"alerted": None, "at": 0})
+        if r["alerted"] is None or cur < r["alerted"]:      # first sight, or the app was reset
+            r["alerted"] = cur
+            continue
+        if cur > r["alerted"] and now - r["at"] >= RIG_BEST_COOLDOWN:
+            top = " 🏆 pool best!" if cur >= pool_top else ""
+            push_alert(f"🎯 NEW BEST DIFF · {cfg['coin']} · {w['name']}",
+                       f"{w['name']} hit {fmt_si(cur)} (was {fmt_si(r['alerted'])}){top}",
+                       tag=f"best-{key}-{w['name']}", kind="bestdiff")
+            r["alerted"], r["at"] = cur, now
     workers.sort(key=lambda w: (-(w["hashrate5m"] or 0)))
     blocks, new_blocks = block_history(key, cfg, history)
     watch_rigs(key, cfg, workers, history, now)
