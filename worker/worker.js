@@ -12,6 +12,7 @@
 //   POST /notify  (Bearer NOTIFY_TOKEN) {type, title, body, url?, tag?} -> { sent, skipped, removed, failed }
 //        type: "block" | "bestdiff" | "offline" | "test" — each device only gets the types it turned on
 //   GET  /health                     -> { subscribers }
+//   GET  /stats                      -> latest stats.json (from GitHub, cached 10 s)  needs secret GH_TOKEN, var STATS_REPO
 //
 // Web Push (RFC 8030/8291/8292) is implemented with WebCrypto only; no dependencies.
 
@@ -94,6 +95,21 @@ export default {
     try {
       if (req.method === "GET" && url.pathname === "/vapid")
         return json(env, { publicKey: (await vapidKeys(env)).publicRaw });
+
+      if (req.method === "GET" && url.pathname === "/stats") {
+        const cache = caches.default, ck = new Request("https://stats.cache/v1");
+        let hit = await cache.match(ck);
+        if (!hit) {
+          const repo = env.STATS_REPO || "MikeyRock/mikeyrocks-solo";
+          const gh = await fetch(`https://api.github.com/repos/${repo}/contents/stats.json?ref=data`, { headers: {
+            Accept: "application/vnd.github.raw+json", "User-Agent": "mikeyrocks-solo-worker",
+            ...(env.GH_TOKEN ? { Authorization: `Bearer ${env.GH_TOKEN}` } : {}) } });
+          if (!gh.ok) return json(env, { error: "github " + gh.status }, 502);
+          hit = new Response(await gh.text(), { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=10" } });
+          await cache.put(ck, hit.clone());
+        }
+        return new Response(hit.body, { headers: cors(env, { "Content-Type": "application/json", "Cache-Control": "no-store" }) });
+      }
 
       if (req.method === "GET" && url.pathname === "/health") {
         const list = await env.SUBS.list({ prefix: "sub:" });

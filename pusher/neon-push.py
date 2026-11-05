@@ -30,6 +30,7 @@ POOLS = {
 }
 HISTORY_SECS = 24 * 3600
 OFFLINE_SECS = 10 * 60
+NODE_EVERY = 55          # node RPCs (slow) refresh at most this often; pool/shares every run
 RIG_BEST_COOLDOWN = 0   # alert on every new best (checked each run, i.e. every minute)
 UNITS = {"": 1, "K": 1e3, "M": 1e6, "G": 1e9, "T": 1e12, "P": 1e15, "E": 1e18, "Z": 1e21}
 
@@ -437,11 +438,19 @@ def collect(key, cfg, history):
     out = {"name": cfg["name"], "coin": cfg["coin"], "updated": now}
 
     # --- node ---
-    bci = rpc(cfg, "getblockchaininfo", timeout=20) or {}
-    net = rpc(cfg, "getnetworkinfo") or {}
     out_stale = False
     cache = history.setdefault("_node", {})
-    if bci:
+    nodecache = history.setdefault("_nodeout", {})
+    fresh_node = now - (nodecache.get(key, {}).get("_at") or 0) < NODE_EVERY
+    if fresh_node:
+        out["node"] = {k: v for k, v in nodecache[key]["node"].items()}
+        if nodecache[key].get("reward"):
+            out["reward"] = nodecache[key]["reward"]
+    bci = {} if fresh_node else (rpc(cfg, "getblockchaininfo", timeout=20) or {})
+    net = {} if fresh_node else (rpc(cfg, "getnetworkinfo") or {})
+    if fresh_node:
+        pass
+    elif bci:
         cache[key] = {k: bci.get(k) for k in ("blocks", "headers", "verificationprogress", "initialblockdownload", "difficulty")}
     else:
         # node busy (e.g. background snapshot validation makes getblockchaininfo slow): use quick calls
@@ -458,7 +467,8 @@ def collect(key, cfg, history):
                    "initialblockdownload": bool(last.get("initialblockdownload")) and cnt < hdr}
             if not out_stale:
                 cache[key] = {**last, "blocks": cnt, "headers": hdr, "difficulty": bci["difficulty"]}
-    out["node"] = {
+    if not fresh_node:
+      out["node"] = {
         "blocks": bci.get("blocks"),
         "headers": bci.get("headers"),
         "progress": bci.get("verificationprogress"),
@@ -471,7 +481,7 @@ def collect(key, cfg, history):
     }
 
     # --- reward for the block being mined right now: subsidy + fees in the template ---
-    if bci.get("blocks") is not None:
+    if not fresh_node and bci.get("blocks") is not None:
         height = bci["blocks"] + 1
         subsidy = (50 * 100_000_000) >> (height // 210_000)
         gbt = rpc(cfg, "getblocktemplate", *cfg.get("gbt", [])) if out["node"]["synced"] else None
@@ -479,6 +489,9 @@ def collect(key, cfg, history):
         out["reward"] = {"height": height, "subsidy_sats": subsidy,
                          "fees_sats": (total - subsidy) if total else None,
                          "total_sats": total or subsidy, "live": bool(total)}
+
+    if not fresh_node:
+        nodecache[key] = {"_at": now, "node": out["node"], "reward": out.get("reward")}
 
     # --- pool ---
     status = cfg["pooldir"] / "pool" / "pool.status"

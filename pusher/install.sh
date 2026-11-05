@@ -38,11 +38,11 @@ EOF
 
 cat > /etc/systemd/system/neon-solo.timer <<EOF
 [Unit]
-Description=Run MikeyRocks//Solo stats push every minute
+Description=Run MikeyRocks//Solo stats push every 15 seconds
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=1min
-AccuracySec=15s
+OnUnitActiveSec=15s
+AccuracySec=1s
 [Install]
 WantedBy=timers.target
 EOF

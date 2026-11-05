@@ -355,7 +355,7 @@ table.st .s-meta{display:none}
     <div class="top"><h2>// Live share log</h2>
       <div class="tabs" id="shareTabs"><button data-c="all" class="on">ALL</button><button data-c="btc">BTC</button><button data-c="bch">BCH</button></div></div>
     <div class="sscroll" id="sharelog"></div>
-    <div class="note">💎 = share that solved a block · luck = share diff ÷ pool target · net % = share diff ÷ network difficulty · refreshes every minute</div>
+    <div class="note">💎 = share that solved a block · luck = share diff ÷ pool target · net % = share diff ÷ network difficulty · refreshes every 15 s</div>
   </section>
 
   <section class="history">
@@ -364,7 +364,7 @@ table.st .s-meta{display:none}
   </section>
 
   <footer>
-    <span>Data pushed from an Umbrel node every minute · read-only mirror</span>
+    <span>Data pushed from an Umbrel node every 15 seconds · read-only mirror</span>
     <span>Powered by ckpool-solo · AxeBTC · AxeBCH</span>
   </footer>
 </div>
@@ -417,9 +417,10 @@ table.st .s-meta{display:none}
 /* ===== CONFIG ===== */
 // Fresh copy via the GitHub API (~1 min old); ETag revalidation keeps it within the
 // unauthenticated rate limit. Falls back to raw.githubusercontent (cached up to 5 min).
+const FAST_URL = "https://mikeyrocks-solo-push.seoxoner.workers.dev/stats";   // ~15 s fresh, via the Worker
 const API_URL  = "https://api.github.com/repos/MikeyRock/mikeyrocks-solo/contents/stats.json?ref=data";
 const DATA_URL = "https://raw.githubusercontent.com/MikeyRock/mikeyrocks-solo/data/stats.json";
-const REFRESH_MS = 60_000;
+const REFRESH_MS = 15_000;
 const STALE_AFTER = 15 * 60;           // seconds
 /* ================== */
 
@@ -601,12 +602,14 @@ let lastGood=null;
 async function getJSON(url, opts){ const r = await fetch(url, opts); if(!r.ok) throw new Error(r.status); return r.json(); }
 async function load(){
   let d=null;
-  try{ d = await getJSON(API_URL, {cache:"no-cache", headers:{Accept:"application/vnd.github.raw+json"}}); }
-  catch(e){ try{ d = await getJSON(DATA_URL+"?t="+Date.now(), {cache:"no-store"}); }catch(e2){} }
+  for(const [u,o] of [[FAST_URL,{cache:"no-store"}],[API_URL,{cache:"no-cache",headers:{Accept:"application/vnd.github.raw+json"}}],[DATA_URL+"?t="+Date.now(),{cache:"no-store"}]]){
+    try{ d = await getJSON(u,o); break; }catch(e){}
+  }
   if(d && (!lastGood || (d.updated||0) >= (lastGood.updated||0))) lastGood = d;
   if(lastGood) render(lastGood, false); else render(demoData(), true);
 }
-load(); setInterval(load, REFRESH_MS);
+load(); setInterval(()=>{ if(!document.hidden) load(); }, REFRESH_MS);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) load(); });
 loadPrices(); setInterval(loadPrices, 5*60_000);
 
 
