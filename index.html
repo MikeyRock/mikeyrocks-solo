@@ -241,6 +241,21 @@ table.st tr.blkrow{animation:blkglow 2.4s ease-in-out infinite}
 .avatar::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:1px dashed #00f0ff55;animation:spin 18s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* pool show/hide */
+button.glyph{background:none;border:0;padding:0;cursor:pointer;transition:transform .15s}
+button.glyph:hover{transform:scale(1.07)} button.glyph:active{transform:scale(.95)}
+.pools.single{grid-template-columns:1fr}
+.dock{display:flex;flex-wrap:wrap;gap:12px;margin:-8px 0 22px}
+.dockbtn{--c:var(--cyan);display:flex;align-items:center;gap:12px;padding:8px 16px 8px 8px;cursor:pointer;color:var(--txt);
+  background:#0b0e17cc;border:1px dashed color-mix(in srgb,var(--c) 60%,transparent);font:12px "JetBrains Mono",monospace;letter-spacing:.08em;text-align:left;
+  clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);transition:.15s}
+.dockbtn.btc{--c:var(--btc)} .dockbtn.bch{--c:var(--bch)}
+.dockbtn:hover{border-style:solid;box-shadow:inset 0 0 14px color-mix(in srgb,var(--c) 25%,transparent)}
+.dockbtn b{color:var(--c);font-weight:700}
+.dockbtn small{display:block;color:var(--dim);font-size:10.5px;margin-top:2px;letter-spacing:.14em;text-transform:uppercase}
+.dockmark{width:38px;height:38px;flex:none;opacity:.8;filter:grayscale(.35) drop-shadow(0 0 6px color-mix(in srgb,var(--c) 50%,transparent))}
+.dockmark svg{width:100%;height:100%;display:block}
+
 /* ===== phone layout ===== */
 .wrap{padding-top:max(28px, calc(env(safe-area-inset-top) + 12px));padding-left:max(20px, env(safe-area-inset-left));padding-right:max(20px, env(safe-area-inset-right));padding-bottom:max(60px, calc(env(safe-area-inset-bottom) + 24px))}
 table.wt td.meta{display:none}
@@ -349,6 +364,7 @@ table.st .s-meta{display:none}
 
   <section class="lastblock none" id="lastblock"></section>
 
+  <section class="dock" id="dock" hidden></section>
   <section class="pools" id="pools"></section>
 
   <section class="shares">
@@ -378,7 +394,7 @@ table.st .s-meta{display:none}
   <article class="pool">
     <div class="ph">
       <div class="coin">
-        <div class="glyph" data-f="glyph"></div>
+        <button class="glyph" data-f="glyph" type="button"></button>
         <div><div class="pname" data-f="name"></div><div class="pmeta" data-f="meta"></div></div>
       </div>
       <div class="tag" data-f="tag"></div>
@@ -461,6 +477,8 @@ function renderPool(key, p, now){
   const f = n => el.querySelector(`[data-f="${n}"]`);
   const pool=p.pool||{}, node=p.node||{}, hr=pool.hashrate||{};
   f("glyph").innerHTML = coinMark(key);
+  f("glyph").title = `Hide ${p.name||key.toUpperCase()}`; f("glyph").setAttribute("aria-label", f("glyph").title);
+  f("glyph").onclick = () => togglePool(key);
   f("name").textContent = p.name || key.toUpperCase();
   f("meta").textContent = `${p.coin||key.toUpperCase()} · ckpool solo · ${node.subversion||""}`;
   const fresh = p.updated && now - p.updated < STALE_AFTER;
@@ -559,12 +577,14 @@ function render(d, demo){
   lastRender=[d,demo];
   const now = Date.now()/1000, pools = d.pools||{};
   const box = $("#pools"); box.innerHTML=""; draws=[];
+  renderDock(pools);
   let tH=0,tW=0,tOff=0,tBest=0,tBlk=0;
   for(const k of ["btc","bch"]){ const p=pools[k]; if(!p) continue;
-    const [el,draw]=renderPool(k,p,now); box.appendChild(el); draws.push(draw);
+    if(!hiddenPools.has(k)){ const [el,draw]=renderPool(k,p,now); box.appendChild(el); draws.push(draw); }
     const hr=p.pool?.hashrate||{}; tH += (hr["5m"]??hr["1m"]??0);
     tW += (p.workers||[]).filter(w=>isOn(w,now)).length;
     tBest = Math.max(tBest, p.pool?.bestever||0); tBlk += p.blocks_found||0; }
+  box.classList.toggle("single", box.children.length===1); box.hidden = box.children.length===0;
   draws.forEach(f=>f());
   renderBlocks(pools);
   renderShares(pools);
@@ -612,6 +632,22 @@ load(); setInterval(()=>{ if(!document.hidden) load(); }, REFRESH_MS);
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) load(); });
 loadPrices(); setInterval(loadPrices, 5*60_000);
 
+
+
+/* ===== show / hide pools (alerts are unaffected: they come from the Umbrel) ===== */
+let hiddenPools = new Set((()=>{ try{ return JSON.parse(localStorage.getItem("hiddenPools"))||[]; }catch(e){ return []; } })());
+function togglePool(k){
+  hiddenPools.has(k) ? hiddenPools.delete(k) : hiddenPools.add(k);
+  try{ localStorage.setItem("hiddenPools", JSON.stringify([...hiddenPools])); }catch(e){}
+  if(lastRender) render(...lastRender);
+}
+function renderDock(pools){
+  const dock=$("#dock"), ks=["btc","bch"].filter(k=>hiddenPools.has(k) && pools[k]);
+  dock.hidden = !ks.length;
+  dock.innerHTML = ks.map(k=>`<button class="dockbtn ${k}" type="button" data-k="${k}" title="Show ${esc(pools[k].name||k)}">
+      <span class="dockmark">${coinMark(k)}</span><span><b>${esc(pools[k].name||k.toUpperCase())}</b> hidden<small>tap to show</small></span></button>`).join("");
+  dock.querySelectorAll("button").forEach(b=>b.onclick=()=>togglePool(b.dataset.k));
+}
 
 /* ===== live share log ===== */
 let shareCoin = "all", seenShares = new Set(), firstShares = true, sharesExpanded = false;
