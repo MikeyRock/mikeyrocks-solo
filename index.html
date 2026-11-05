@@ -227,6 +227,14 @@ tr.fresh td{animation:fresh 2.2s ease-out}
   padding:14px 26px;cursor:pointer;box-shadow:0 0 24px var(--pc);white-space:nowrap}
 .party .clear:hover{background:#111}
 
+/* avatar */
+.idwrap{display:flex;align-items:center;gap:20px}
+.avatar{flex:none;position:relative;width:96px;height:96px;border-radius:50%;padding:3px;display:block;
+  background:conic-gradient(from 210deg,var(--cyan),var(--mag),var(--cyan));box-shadow:0 0 18px #00f0ff66,0 0 34px #ff2bd644}
+.avatar img{width:100%;height:100%;border-radius:50%;display:block;object-fit:cover;border:2px solid #05060a;background:#05060a}
+.avatar::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:1px dashed #00f0ff55;animation:spin 18s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 /* ===== phone layout ===== */
 .wrap{padding-top:max(28px, calc(env(safe-area-inset-top) + 12px));padding-left:max(20px, env(safe-area-inset-left));padding-right:max(20px, env(safe-area-inset-right));padding-bottom:max(60px, calc(env(safe-area-inset-bottom) + 24px))}
 table.wt td.meta{display:none}
@@ -234,6 +242,7 @@ table.st .s-meta{display:none}
 @media (max-width:620px){
   .wrap{padding-left:max(14px, env(safe-area-inset-left));padding-right:max(14px, env(safe-area-inset-right))}
   header{flex-direction:column;align-items:stretch;gap:12px;margin-bottom:18px}
+  .idwrap{gap:14px} .avatar{width:64px;height:64px;padding:2px}
   .sub{letter-spacing:.18em;font-size:10.5px}
   .status{flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
   .status .muted{order:3;width:100%;font-size:11px}
@@ -301,9 +310,12 @@ table.st .s-meta{display:none}
 <body>
 <div class="wrap">
   <header>
-    <div>
+    <div class="idwrap">
+     <a class="avatar" href="./" aria-label="MikeyRocks"><img src="icons/avatar.jpg" alt="MikeyRocks" width="96" height="96"></a>
+     <div>
       <h1 class="brand" data-text="MIKEYROCKS//SOLO">MIKEYROCKS<span>//</span>SOLO</h1>
       <div class="sub">home-grown hashrate · <b>BTC</b> + <b>BCH</b> · solo or nothing</div>
+     </div>
     </div>
     <div class="status">
       <div class="alertwrap" id="alertwrap" hidden>
