@@ -439,19 +439,25 @@ def collect(key, cfg, history):
     # --- node ---
     bci = rpc(cfg, "getblockchaininfo", timeout=20) or {}
     net = rpc(cfg, "getnetworkinfo") or {}
+    out_stale = False
     cache = history.setdefault("_node", {})
     if bci:
         cache[key] = {k: bci.get(k) for k in ("blocks", "headers", "verificationprogress", "initialblockdownload", "difficulty")}
     else:
         # node busy (e.g. background snapshot validation makes getblockchaininfo slow): use quick calls
-        cnt = rpc(cfg, "getblockcount", timeout=15)
-        dif = rpc(cfg, "getdifficulty", timeout=15)
+        cnt = rpc(cfg, "getblockcount", timeout=40)
+        dif = rpc(cfg, "getdifficulty", timeout=20) if isinstance(cnt, int) else None
         last = cache.get(key) or {}
+        if not isinstance(cnt, int) and last.get("blocks"):
+            cnt = last["blocks"]                      # node too busy to answer: keep last known values
+            out_stale = True
         if isinstance(cnt, int):
             hdr = max(cnt, last.get("headers") or 0)
             bci = {"blocks": cnt, "headers": hdr, "difficulty": dif if isinstance(dif, (int, float)) else last.get("difficulty"),
                    "verificationprogress": last.get("verificationprogress") if cnt < hdr else 1,
                    "initialblockdownload": bool(last.get("initialblockdownload")) and cnt < hdr}
+            if not out_stale:
+                cache[key] = {**last, "blocks": cnt, "headers": hdr, "difficulty": bci["difficulty"]}
     out["node"] = {
         "blocks": bci.get("blocks"),
         "headers": bci.get("headers"),
@@ -461,6 +467,7 @@ def collect(key, cfg, history):
         "peers": net.get("connections"),
         "subversion": net.get("subversion"),
         "online": bool(bci),
+        "stale": out_stale,
     }
 
     # --- reward for the block being mined right now: subsidy + fees in the template ---
