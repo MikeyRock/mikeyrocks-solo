@@ -347,7 +347,7 @@ def push_alert(title, body, tag="block", kind="block"):
         return None
 
 
-def alert_block(key, cfg, b):
+def alert_block(key, cfg, b, test=False):
     coin = cfg["coin"]
     stats = rpc(cfg, "getblockstats", str(b["height"]), '["subsidy","totalfee"]') or {}
     reward = (stats.get("subsidy") or ((50 * 100_000_000) >> (b["height"] // 210_000))) + (stats.get("totalfee") or 0)
@@ -357,7 +357,8 @@ def alert_block(key, cfg, b):
     if b.get("effort") is not None:
         parts.append(f"Effort: {b['effort']:.1f}%")
     parts.append(f"Reward: {reward / 1e8:.4f} {coin}")
-    res = push_alert(f"⛏️ BLOCK FOUND! {coin} #{b['height']:,}", " · ".join(parts), tag=f"block-{key}-{b['height']}")
+    res = push_alert(f"⛏️ BLOCK FOUND! {coin} #{b['height']:,}" + (" (resend)" if test else ""), " · ".join(parts),
+                     tag=f"block-{key}-{b['height']}" + ("-test" if test else ""))
     print(f"block alert {coin} #{b['height']}: {res}")
 
 
@@ -594,6 +595,18 @@ def main():
             print("another run is in progress; waiting for it")
         fcntl.flock(lock, fcntl.LOCK_EX)        # wait our turn instead of colliding
     env = load_env()
+    if "--test-block" in sys.argv:
+        # resend a real block alert (latest block found) exactly as it would go out
+        hist = json.loads((HOME / "history.json").read_text()) if (HOME / "history.json").exists() else {}
+        best = None
+        for key, cfg in POOLS.items():
+            for b in hist.get("_blockhist", {}).get(key, {}).get("blocks", []):
+                if not best or b["time"] > best[2]["time"]:
+                    best = (key, cfg, b)
+        if not best:
+            print("no blocks recorded yet"); return
+        alert_block(best[0], best[1], best[2], test=True)
+        return
     if "--test-alert" in sys.argv:
         res = push_alert("🧪 TEST · BLOCK FOUND! BCH #000,000",
                          "Rig: TEST-RIG · Diff: 1.81T · Effort: 9.5% · Reward: 3.1251 BCH — this is only a test", tag="test", kind="test")
