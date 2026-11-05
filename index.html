@@ -67,11 +67,14 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
 @keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
 /* totals */
-.totals{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:26px}
+.totals{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:26px}
 .tot{padding:16px 18px;border:1px solid var(--line);background:var(--panel);position:relative}
 .tot::before{content:"";position:absolute;left:0;top:0;width:28px;height:2px;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
 .tot .k{font-size:11px;color:var(--dim);letter-spacing:.22em;text-transform:uppercase}
 .tot .v{font-family:Orbitron,"Arial Black",sans-serif;font-weight:700;font-size:26px;margin-top:8px;color:#fff}
+.tot.earned::before{background:var(--yel);box-shadow:0 0 10px var(--yel)}
+.tot.earned .v{color:var(--yel);text-shadow:0 0 12px #f5ff3b55}
+.tot .sub2{font-size:11px;color:var(--dim);margin-top:4px;letter-spacing:.06em}
 .tot .v small{font-size:13px;color:var(--cyan);margin-left:4px}
 
 /* pools */
@@ -274,6 +277,7 @@ table.st .s-meta{display:none}
   .status .muted{order:3;width:100%;font-size:11px}
   .totals{gap:10px;margin-bottom:18px}
   .tot{padding:12px 14px} .tot .v{font-size:21px}
+  .tot.earned{grid-column:1/-1}
   .lastblock{padding:16px;gap:12px 22px;margin-bottom:18px}
   .lastblock .trophy{font-size:26px}
   .pool{padding:16px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
@@ -329,7 +333,7 @@ table.st .s-meta{display:none}
 .more{display:none;width:100%;margin-top:12px;padding:10px;background:#0006;border:1px solid #ff2bd666;color:#ffd0f4;
   font:600 11px "JetBrains Mono",monospace;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}
 
-@media (max-width:980px){.pools{grid-template-columns:1fr}.totals{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:980px){.pools{grid-template-columns:1fr}.totals{grid-template-columns:repeat(2,1fr)}.tot.earned{grid-column:1/-1}}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,1fr)}.status{align-items:flex-start}.hide-sm{display:none}}
 @media (prefers-reduced-motion:reduce){*:not(#ticker){animation:none!important} #ticker{animation-duration:70s}}
 </style>
@@ -366,6 +370,7 @@ table.st .s-meta{display:none}
     <div class="tot"><div class="k">Rigs online</div><div class="v" id="tWork">—</div></div>
     <div class="tot"><div class="k">Best share ever</div><div class="v" id="tBest">—</div></div>
     <div class="tot"><div class="k">Blocks found</div><div class="v" id="tBlocks">—</div></div>
+    <div class="tot earned"><div class="k">Total earned</div><div class="v" id="tEarned">—</div><div class="sub2" id="tEarnedCoins"></div></div>
   </section>
 
   <section class="lastblock none" id="lastblock"></section>
@@ -553,6 +558,7 @@ function coinMark(key){
 }
 const effCls = e => e<=100 ? "lucky" : "unlucky";
 function rewardCell(b){
+  if(b.reward_sats!=null && b.reward_sats<=1e6) b={...b, reward_sats:null};
   if(b.reward_sats==null && b.price_usd) b={...b, reward_sats:(50e8/2**Math.floor(b.height/210000)), fees_known:false};
   if(b.reward_sats==null) return '<span class="dimx">…</span>';
   const v=coinAmt(b.reward_sats), C=b.coin.toUpperCase();
@@ -609,6 +615,13 @@ function render(d, demo){
   if(!demo) checkCelebration(pools);
   const [hv,hu]=si(tH); $("#tHash").innerHTML=`${hv}<small>${hu}H/s</small>`;
   $("#tWork").textContent=num(tW); $("#tBest").textContent=sh(tBest); $("#tBlocks").textContent=num(tBlk);
+  { let usdSum=0, coins=[], partial=false;
+    for(const k of ["btc","bch"]){ let sats=0;
+      for(const b of (pools[k]?.blocks||[])){ const r=(b.reward_sats>1e6 ? b.reward_sats : null) ?? (b.height!=null ? 50e8/2**Math.floor(b.height/210000) : 0);
+        sats+=r; if(b.price_usd) usdSum+=r/1e8*b.price_usd; else partial=true; }
+      if(sats) coins.push(`${(sats/1e8).toFixed(4)} ${k.toUpperCase()}`); }
+    $("#tEarned").textContent = usdSum ? usd(usdSum)+(partial?"+":"") : (coins.length?"—":"$0");
+    $("#tEarnedCoins").textContent = coins.join(" · ") + (usdSum?" · at price when hit":""); }
   const age = now-(d.updated||0), live=$("#live");
   if(demo){ live.className="pill demo"; $("#liveTxt").textContent="DEMO DATA"; }
   else if(age<STALE_AFTER){ live.className="pill live"; $("#liveTxt").textContent="LIVE FEED"; }
