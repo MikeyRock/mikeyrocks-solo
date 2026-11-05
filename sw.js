@@ -5,7 +5,7 @@ self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 self.addEventListener("push", event => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch { d = { body: event.data && event.data.text() }; }
-  event.waitUntil(self.registration.showNotification(d.title || "⛏️ BLOCK FOUND!", {
+  event.waitUntil(self.registration.showNotification(d.title || "🏆 BLOCK FOUND! 🏆", {
     body: d.body || "",
     icon: "icons/icon-192.png",
     badge: "icons/badge-96.png",

@@ -357,7 +357,7 @@ def alert_block(key, cfg, b, test=False):
     if b.get("effort") is not None:
         parts.append(f"Effort: {b['effort']:.1f}%")
     parts.append(f"Reward: {reward / 1e8:.4f} {coin}")
-    res = push_alert(f"⛏️ BLOCK FOUND! {coin} #{b['height']:,}" + (" (resend)" if test else ""), " · ".join(parts),
+    res = push_alert(f"🏆 {coin} BLOCK FOUND! #{b['height']:,} 🏆" + (" (resend)" if test else ""), " · ".join(parts),
                      tag=f"block-{key}-{b['height']}" + ("-test" if test else ""))
     print(f"block alert {coin} #{b['height']}: {res}")
 
@@ -522,7 +522,7 @@ def collect(key, cfg, history):
             r["alerted"] = cur
             continue
         if cur > r["alerted"] and now - r["at"] >= RIG_BEST_COOLDOWN:
-            top = " 🏆 pool best!" if cur >= pool_top else ""
+            top = " 👑 pool best!" if cur >= pool_top else ""
             push_alert(f"🎯 NEW BEST DIFF · {cfg['coin']} · {w['name']}",
                        f"{w['name']} hit {fmt_si(cur)} (was {fmt_si(r['alerted'])}){top}",
                        tag=f"best-{key}-{w['name']}", kind="bestdiff")
@@ -608,7 +608,7 @@ def main():
         alert_block(best[0], best[1], best[2], test=True)
         return
     if "--test-alert" in sys.argv:
-        res = push_alert("🧪 TEST · BLOCK FOUND! BCH #000,000",
+        res = push_alert("🧪 TEST · 🏆 BCH BLOCK FOUND! #000,000 🏆",
                          "Rig: TEST-RIG · Diff: 1.81T · Effort: 9.5% · Reward: 3.1251 BCH — this is only a test", tag="test", kind="test")
         print("test alert:", res if res is not None else "not sent (check NEON_PUSH_URL / NEON_PUSH_TOKEN in config.env)")
         return

@@ -310,7 +310,7 @@ table.st .s-meta{display:none}
         <button class="bell" id="bell"><span id="bellTxt">🔔 Alerts</span><span class="sw"></span></button>
         <div class="apanel" id="apanel" hidden>
           <div class="ah">Push alerts · this device</div>
-          <label class="arow"><span><b>⛏️ Block found</b><small>coin, block #, rig, diff, effort, reward</small></span><input type="checkbox" data-pref="block"><i class="sw"></i></label>
+          <label class="arow"><span><b>🏆 Block found</b><small>coin, block #, rig, diff, effort, reward</small></span><input type="checkbox" data-pref="block"><i class="sw"></i></label>
           <label class="arow"><span><b>🎯 New best diff</b><small>a rig beats its best-ever share</small></span><input type="checkbox" data-pref="bestdiff"><i class="sw"></i></label>
           <label class="arow"><span><b>📴 Rig offline</b><small>no shares for 10 min · and back online</small></span><input type="checkbox" data-pref="offline"><i class="sw"></i></label>
         </div>
@@ -710,7 +710,7 @@ async function changePref(input){
     const r = await fetch(PUSH_API+"/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subscription:sub.toJSON(), prefs:want})});
     if(!r.ok) throw new Error("server said "+r.status);
     savePrefs(want); showPrefs(want);
-    const names={block:"⛏️ Block found",bestdiff:"🎯 New best diff",offline:"📴 Rig offline"};
+    const names={block:"🏆 Block found",bestdiff:"🎯 New best diff",offline:"📴 Rig offline"};
     toast(`<b>${names[input.dataset.pref]}</b> alerts ${input.checked?"<b>on</b>":"off"} for this device.`);
   }catch(e){ showPrefs(before); toast("Couldn't change alerts: "+esc(e.message||e)); }
   finally{ panel.classList.remove("busy"); }
