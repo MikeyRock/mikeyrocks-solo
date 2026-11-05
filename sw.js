@@ -7,7 +7,7 @@ self.addEventListener("push", event => {
   try { d = event.data ? event.data.json() : {}; } catch { d = { body: event.data && event.data.text() }; }
   event.waitUntil(self.registration.showNotification(d.title || "🏆 BLOCK FOUND! 🏆", {
     body: d.body || "",
-    icon: "icons/icon-192.png",
+    icon: "icons/icon2-192.png",
     badge: "icons/badge-96.png",
     tag: d.tag || "block",
     renotify: true,
