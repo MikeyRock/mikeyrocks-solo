@@ -495,6 +495,19 @@ def refresh_nodes():
         except Exception as e:
             print(f"node refresh {key} failed: {e}", file=sys.stderr)
     data["_cache"] = cache
+    # block rewards (subsidy + fees) for found blocks, looked up once each
+    hist = read_json_retry(HOME / "history.json") or {}
+    rw = data.setdefault("_rewards", {})
+    for key, cfg in POOLS.items():
+        have = rw.setdefault(key, {})
+        todo = [b["height"] for b in hist.get("_blockhist", {}).get(key, {}).get("blocks", [])
+                if isinstance(b.get("height"), int) and str(b["height"]) not in have][:15]
+        for h in todo:
+            st = rpc(cfg, "getblockstats", str(h), '["subsidy","totalfee"]', timeout=15)
+            if isinstance(st, dict) and "subsidy" in st:
+                have[str(h)] = {"subsidy": st["subsidy"], "fees": st.get("totalfee")}
+            else:   # pruned / unavailable: subsidy is exact from height, fees unknown
+                have[str(h)] = {"subsidy": (50 * 100_000_000) >> (h // 210_000), "fees": None}
     tmp = NODE_FILE.with_suffix(".tmp"); tmp.write_text(json.dumps(data)); tmp.replace(NODE_FILE)
 
 
@@ -513,7 +526,9 @@ def collect(key, cfg, history):
     out = {"name": cfg["name"], "coin": cfg["coin"], "updated": now}
 
     # --- node + reward: refreshed by a background job (slow node never delays this run) ---
-    nd = load_node_cache().get(key) or {}
+    nc = load_node_cache()
+    nd = nc.get(key) or {}
+    rws = (nc.get("_rewards") or {}).get(key) or {}
     out["node"] = nd.get("node") or {"blocks": None, "headers": None, "progress": None, "synced": False,
                                       "difficulty": None, "peers": None, "subversion": None, "online": False, "stale": True}
     if nd.get("reward"):
@@ -593,6 +608,11 @@ def collect(key, cfg, history):
     watch_rigs(key, cfg, workers, history, now)
     # only publish rigs that submitted a share in the last 10 minutes
     workers = [w for w in workers if w["lastshare"] and now - w["lastshare"] < OFFLINE_SECS]
+    for b in blocks:
+        r = rws.get(str(b.get("height")))
+        if r:
+            b["reward_sats"] = r["subsidy"] + (r["fees"] or 0)
+            b["fees_known"] = r["fees"] is not None
     out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks),
                shares=recent_shares(cfg))
     cleanup_sharelogs(key, cfg, blocks, history, now, dry_run="--cleanup-dry-run" in sys.argv)

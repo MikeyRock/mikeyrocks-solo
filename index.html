@@ -151,6 +151,8 @@ tr.offline td.wname::before{color:var(--red)}
 .hscroll thead th{position:sticky;top:0;background:#0b0e17}
 .hscroll td a{color:var(--cyan);text-decoration:none}
 .lucky{color:var(--grn)!important} .unlucky{color:#ff9db0!important}
+table.ht td.h-rw{color:#fff;white-space:nowrap} table.ht td.h-rw small{color:var(--dim);font-size:10px}
+table.ht td.h-rw sup{color:var(--dim);font-size:9px;margin-left:1px} .dimx{color:var(--dim)}
 .cb{font-weight:800;letter-spacing:.1em} .cb.btc{color:var(--btc)} .cb.bch{color:var(--bch)}
 
 /* reward */
@@ -294,7 +296,7 @@ table.st .s-meta{display:none}
   table.wt .meta b{color:var(--txt);font-weight:600}
 
   /* block history rows become cards */
-  table.ht tr{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"coin blk eff" "date date rig" "diff diff diff";gap:3px 10px;padding:10px 2px;border-bottom:1px solid #121829}
+  table.ht tr{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"coin blk eff" "date date rig" "diff diff rw";gap:3px 10px;padding:10px 2px;border-bottom:1px solid #121829}
   table.ht td{padding:0;border:0;text-align:left;white-space:nowrap}
   table.ht .h-coin{grid-area:coin} table.ht .h-blk{grid-area:blk;font-weight:600}
   table.ht .h-eff{grid-area:eff;text-align:right;font-weight:600}
@@ -302,6 +304,7 @@ table.st .s-meta{display:none}
   table.ht .h-rig{grid-area:rig;text-align:right;font-size:12px;color:var(--yel)}
   table.ht .h-diff{grid-area:diff;font-size:11.5px;color:var(--dim)}
   table.ht .h-diff::before{content:"share diff "}
+  table.ht td.h-rw{grid-area:rw;text-align:right;font-size:12px}
   .hscroll{max-height:none;overflow:visible}
   html,body,.hscroll{scrollbar-width:none;-ms-overflow-style:none}
   html::-webkit-scrollbar,body::-webkit-scrollbar,.hscroll::-webkit-scrollbar{display:none;width:0;height:0}
@@ -546,6 +549,11 @@ function coinMark(key){
   </svg>`;
 }
 const effCls = e => e<=100 ? "lucky" : "unlucky";
+function rewardCell(b){
+  if(b.reward_sats==null) return '<span class="dimx">…</span>';
+  const v=coinAmt(b.reward_sats), C=b.coin.toUpperCase();
+  return b.fees_known ? `${v} <small>${C}</small>` : `<span title="Fees unknown: block no longer on the pruned node">${v}<sup>+?</sup> <small>${C}</small></span>`;
+}
 function renderBlocks(pools){
   const all=[]; for(const k of ["btc","bch"]) for(const b of (pools[k]?.blocks||[])) all.push({...b, coin:k});
   all.sort((a,b)=>b.time-a.time);
@@ -564,8 +572,8 @@ function renderBlocks(pools){
     lb.innerHTML=`<div><div class="lb-k">Last block found</div><div class="lb-main">None yet — still hunting</div></div>`;
   }
   const expanded = $("#history").dataset.expanded==="1";
-  $("#history").innerHTML = all.length ? `<table class="ht${expanded?"":" collapsed"}"><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th><th>Share diff</th><th>Effort</th></tr></thead><tbody>${
-    all.map(b=>`<tr><td class="h-coin"><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td class="h-blk">${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td class="h-date">${fmtDate(b.time)}</td><td class="h-rig">${esc(rigOf(b.rig))}</td><td class="h-diff">${b.diff?sh(b.diff):"—"}</td><td class="h-eff ${b.effort!=null?effCls(b.effort):""}">${b.effort!=null?b.effort.toFixed(1)+"%":"—"}</td></tr>`).join("")
+  $("#history").innerHTML = all.length ? `<table class="ht${expanded?"":" collapsed"}"><thead><tr><th>Coin</th><th>Block #</th><th>Date</th><th>Rig</th><th>Share diff</th><th>Effort</th><th>Reward</th></tr></thead><tbody>${
+    all.map(b=>`<tr><td class="h-coin"><span class="cb ${b.coin}">${b.coin.toUpperCase()}</span></td><td class="h-blk">${b.height!=null?`<a href="${EXPLORER[b.coin](b.height)}" target="_blank" rel="noopener">${num(b.height)}</a>`:"?"}</td><td class="h-date">${fmtDate(b.time)}</td><td class="h-rig">${esc(rigOf(b.rig))}</td><td class="h-diff">${b.diff?sh(b.diff):"—"}</td><td class="h-eff ${b.effort!=null?effCls(b.effort):""}">${b.effort!=null?b.effort.toFixed(1)+"%":"—"}</td><td class="h-rw">${rewardCell(b)}</td></tr>`).join("")
   }</tbody></table>${all.length>8?`<button class="more" id="moreBtn">${expanded?"Show fewer":`Show all ${all.length} blocks`}</button>`:""}` : `<div class="empty">No blocks found yet. When a rig hits one, it lands here with block #, date and rig name.</div>`;
   const mb=$("#moreBtn"); if(mb) mb.onclick=()=>{ const h=$("#history"); h.dataset.expanded = h.dataset.expanded==="1"?"0":"1"; renderBlocks(pools); };
 }
