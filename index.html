@@ -99,6 +99,10 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
 .hero .unit{font-family:Orbitron,"Arial Black",sans-serif;font-size:18px;color:#fff}
 .hero-k{font-size:11px;color:var(--dim);letter-spacing:.22em;text-transform:uppercase}
 
+.netline{display:flex;align-items:baseline;justify-content:flex-end;gap:10px;margin:12px 0 -6px;font-size:11px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;min-height:14px}
+.netline b{color:var(--cyan);font-size:14px;letter-spacing:.04em;text-transform:none;text-shadow:0 0 8px #00f0ff66}
+.netline .up{color:var(--grn);letter-spacing:.04em;text-transform:none} .netline .dn{color:var(--red);letter-spacing:.04em;text-transform:none}
+.netline .dash{display:inline-block;width:16px;border-top:2px dashed #00f0ffaa;margin-right:6px;vertical-align:middle}
 canvas{width:100%;height:120px;display:block;margin:14px 0 18px;border-bottom:1px dashed var(--line)}
 
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:18px}
@@ -413,6 +417,7 @@ table.st .s-meta{display:none}
     <div class="hero-k">Pool hashrate · 5m</div>
     <div class="hero"><span class="big" data-f="hr"></span><span class="unit" data-f="hrU"></span></div>
     <div class="reward" data-f="reward"></div>
+    <div class="netline" data-f="netline"></div>
     <canvas data-f="chart"></canvas>
 
     <div class="sect">Pool</div>
@@ -473,12 +478,28 @@ function drawChart(cv, pts, color){
   const X=t=>(t-x0)/(x1-x0||1)*(w-2)+1, Y=v=>h-4-(v/y1)*(h-12);
   g.strokeStyle="#1c2336"; g.lineWidth=1;
   for(let i=1;i<4;i++){ g.beginPath(); g.moveTo(0,h*i/4); g.lineTo(w,h*i/4); g.stroke(); }
+  // network hashrate: own scale (min..max of the window), dashed, behind the pool line
+  const np = pts.filter(p=>p[2]>0);
+  if(np.length>1){
+    let lo=Math.min(...np.map(p=>p[2])), hi=Math.max(...np.map(p=>p[2])); const pad=(hi-lo)*0.25||hi*0.02; lo-=pad; hi+=pad;
+    const NY=v=>h-6-((v-lo)/(hi-lo))*(h-20);
+    g.save(); g.setLineDash([5,4]); g.strokeStyle="#00f0ffaa"; g.lineWidth=1.4; g.shadowColor="#00f0ff"; g.shadowBlur=6;
+    g.beginPath(); np.forEach((p,i)=> i?g.lineTo(X(p[0]),NY(p[2])):g.moveTo(X(p[0]),NY(p[2]))); g.stroke(); g.restore();
+  }
   const grad=g.createLinearGradient(0,0,0,h); grad.addColorStop(0,color+"55"); grad.addColorStop(1,color+"00");
   g.beginPath(); pts.forEach((p,i)=> i?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1])));
   g.lineTo(X(x1),h); g.lineTo(X(x0),h); g.closePath(); g.fillStyle=grad; g.fill();
   g.beginPath(); pts.forEach((p,i)=> i?g.lineTo(X(p[0]),Y(p[1])):g.moveTo(X(p[0]),Y(p[1])));
   g.strokeStyle=color; g.lineWidth=2; g.shadowColor=color; g.shadowBlur=10; g.stroke(); g.shadowBlur=0;
   g.fillStyle="#6f7ea3"; g.font="10px JetBrains Mono"; g.fillText(hs(y1/1.15),4,12); g.fillText("24h",w-28,h-6);
+}
+
+function netLine(p){
+  const n=p.node?.nethash; if(!n) return "";
+  const np=(p.history||[]).filter(x=>x[2]>0);
+  let ch=""; if(np.length>1){ const a=np[0][2], b=np[np.length-1][2], pct=(b-a)/a*100, hrs=Math.max(1,Math.round((np[np.length-1][0]-np[0][0])/3600));
+    ch=`<span class="${pct>=0?"up":"dn"}">${pct>=0?"▲ +":"▼ "}${pct.toFixed(2)}% · ${hrs} h</span>`; }
+  return `<span class="nl-k"><i class="dash"></i>Network</span><b>${hs(n)}</b>${ch}`;
 }
 
 function renderPool(key, p, now){
@@ -520,6 +541,7 @@ function renderPool(key, p, now){
   f("wtable").innerHTML = ws.length ? `<table class="wt"><thead><tr><th>Worker</th><th>5m</th><th>1h</th><th>Best</th><th>Last share</th></tr></thead><tbody>${
     ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td class="c-hr">${hs(w.hashrate5m??w.hashrate1m)}</td><td class="c-1h">${hs(w.hashrate1h)}</td><td class="c-best">${rigBest(w)}</td><td class="c-last on">${ago(w.lastshare)}</td><td class="meta">best <b>${rigBest(w)}</b> · 1h ${hs(w.hashrate1h)}</td></tr>`).join("")
   }</tbody></table>` : `<div class="empty">no rigs hashing right now</div>`;
+  f("netline").innerHTML = netLine(p);
   return [el, () => drawChart(f("chart"), p.history, color)];
 }
 const OFFLINE_SECS = 600;

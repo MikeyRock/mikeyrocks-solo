@@ -500,6 +500,10 @@ def node_info(key, cfg, cache, now):
         "difficulty": bci.get("difficulty"), "peers": net.get("connections"), "subversion": net.get("subversion"),
         "online": bool(bci), "stale": out_stale,
     }
+    nh = rpc(cfg, "getnetworkhashps", timeout=25)
+    if not isinstance(nh, (int, float)) and isinstance(bci.get("difficulty"), (int, float)):
+        nh = bci["difficulty"] * 2 ** 32 / 600          # estimate from difficulty (600 s target)
+    out["node"]["nethash"] = float(nh) if isinstance(nh, (int, float)) else None
     if bci.get("blocks") is not None:
         height = bci["blocks"] + 1
         subsidy = (50 * 100_000_000) >> (height // 210_000)
@@ -693,7 +697,7 @@ def collect(key, cfg, history):
     # --- history (local file, last 24h of 5m hashrate) ---
     h = [p for p in history.get(key, []) if p[0] > now - HISTORY_SECS]
     if hrs["5m"] is not None and (not h or now - h[-1][0] >= 240):
-        h.append([now, hrs["5m"]])
+        h.append([now, hrs["5m"], out["node"].get("nethash")])
     history[key] = h
     out["history"] = h
     return out
