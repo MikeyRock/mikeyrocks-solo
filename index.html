@@ -206,6 +206,12 @@ table.st .s-diff{color:#fff;font-weight:600} table.st .s-dev{color:var(--dim);te
 .lk{color:#7fdcff} .lk.hi{color:var(--yel);font-weight:700} .lk.mega{color:#ff9d1c;font-weight:800;text-shadow:0 0 8px #ff9d1c88}
 tr.fresh td{animation:fresh 2.2s ease-out}
 @keyframes fresh{0%{background:#00f0ff2e}100%{background:transparent}}
+table.st tr.blkrow td{background:#f5ff3b1c;border-top:1px solid #f5ff3b88;border-bottom:1px solid #f5ff3b88}
+table.st tr.blkrow td.s-diff{color:var(--yel);text-shadow:0 0 10px #f5ff3b99}
+table.st tr.blkrow td.s-rig{color:#fff}
+table.st tr.blkrow{animation:blkglow 2.4s ease-in-out infinite}
+@keyframes blkglow{0%,100%{box-shadow:inset 0 0 0 #0000}50%{box-shadow:inset 0 0 24px #f5ff3b44}}
+.gem{margin-right:6px;filter:drop-shadow(0 0 6px #7fdcff)}
 .shares .note{font-size:11px;color:var(--dim);margin-top:10px}
 
 /* ===== block found celebration ===== */
@@ -349,7 +355,7 @@ table.st .s-meta{display:none}
     <div class="top"><h2>// Live share log</h2>
       <div class="tabs" id="shareTabs"><button data-c="all" class="on">ALL</button><button data-c="btc">BTC</button><button data-c="bch">BCH</button></div></div>
     <div class="sscroll" id="sharelog"></div>
-    <div class="note">Latest accepted shares from every rig · luck = share diff ÷ pool target · net % = share diff ÷ network difficulty · refreshes every minute</div>
+    <div class="note">💎 = share that solved a block · luck = share diff ÷ pool target · net % = share diff ÷ network difficulty · refreshes every minute</div>
   </section>
 
   <section class="history">
@@ -620,8 +626,9 @@ function renderShares(pools){
     const key=x.coin+x.t+x.rig+x.sdiff, isNew=!firstShares && !seenShares.has(key); seenShares.add(key);
     const luck = x.diff ? x.sdiff/x.diff : null, lc = luck>=10?"mega":luck>=3?"hi":"";
     const net = x.nd ? netPct(x.sdiff/x.nd*100) : "—";
-    return `<tr class="${isNew?"fresh":""}"><td class="s-time">${fmtTime(x.t)}</td><td class="s-coin"><span class="cb ${x.coin}">${x.coin.toUpperCase()}</span></td>
-      <td class="s-rig">${esc(x.rig)}</td><td class="s-diff">${sh(x.sdiff)}</td><td class="s-luck"><span class="lk ${lc}">${luck?luck.toFixed(1)+"×":"—"}</span></td>
+    const blk = x.nd && x.sdiff >= x.nd;
+    return `<tr class="${isNew?"fresh":""}${blk?" blkrow":""}"><td class="s-time">${fmtTime(x.t)}</td><td class="s-coin"><span class="cb ${x.coin}">${x.coin.toUpperCase()}</span></td>
+      <td class="s-rig">${esc(x.rig)}</td><td class="s-diff">${blk?'<span class="gem" title="Block found">💎</span>':""}${sh(x.sdiff)}</td><td class="s-luck"><span class="lk ${lc}">${luck?luck.toFixed(1)+"×":"—"}</span></td>
       <td class="s-net">${net}</td><td class="s-dev">${esc(x.dev||"—")}</td>
       <td class="s-meta">${fmtTime(x.t)} · <span class="lk ${lc}">${luck?luck.toFixed(1)+"×":""}</span> · ${net} · ${esc(x.dev||"")}${shareCoin==="all"?` · <span class="cb ${x.coin}">${x.coin.toUpperCase()}</span>`:""}</td></tr>`; }).join("");
   firstShares=false;
