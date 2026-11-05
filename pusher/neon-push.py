@@ -26,6 +26,7 @@ POOLS = {
         "container": "willitmod-dev-bch_bchn_1",
         "cli": ["bitcoin-cli", "-datadir=/data"],
         "gbt": [],
+        "stats_in_coins": True,          # BCHN getblockstats reports BCH, not satoshis
     },
 }
 HISTORY_SECS = 24 * 3600
@@ -267,6 +268,27 @@ def price_now(key):
         return None
 
 
+def price_history(key, t0, t1):
+    """[(unix_seconds, usd)] from CoinGecko, hourly for ranges up to 90 days (chunked)."""
+    cid, pts, start = COINGECKO_ID.get(key), [], int(t0) - 7200
+    while start < t1:
+        end = min(int(t1) + 7200, start + 89 * 86400)
+        url = f"https://api.coingecko.com/api/v3/coins/{cid}/market_chart/range?vs_currency=usd&from={start}&to={end}"
+        req = urllib.request.Request(url, headers={"User-Agent": "mikeyrocks-solo-pusher", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            pts += [(ms / 1000, px) for ms, px in json.loads(r.read()).get("prices", [])]
+        start = end
+        time.sleep(2)
+    return pts
+
+
+def to_sats(v, coins=False):
+    """getblockstats amounts: Bitcoin Core gives satoshis, Bitcoin Cash Node gives coins (e.g. 3.125)."""
+    if v is None:
+        return None
+    return int(round(float(v) * 1e8)) if coins else int(v)
+
+
 def read_app_blocks(cfg):
     d = read_json_retry(cfg["pooldir"].parent.parent / "ui" / "state" / "blocks_state.json")
     if d is None:
@@ -367,7 +389,8 @@ def push_alert(title, body, tag="block", kind="block"):
 def alert_block(key, cfg, b, test=False):
     coin = cfg["coin"]
     stats = rpc(cfg, "getblockstats", str(b["height"]), '["subsidy","totalfee"]', timeout=10) or {}
-    reward = (stats.get("subsidy") or ((50 * 100_000_000) >> (b["height"] // 210_000))) + (stats.get("totalfee") or 0)
+    c = cfg.get("stats_in_coins", False)
+    reward = (to_sats(stats.get("subsidy"), c) or ((50 * 100_000_000) >> (b["height"] // 210_000))) + (to_sats(stats.get("totalfee"), c) or 0)
     parts = [f"Rig: {rig_or_default(b['rig'])}"]
     if b.get("diff"):
         parts.append(f"Diff: {fmt_si(b['diff'])}")
@@ -514,16 +537,39 @@ def refresh_nodes():
     # block rewards (subsidy + fees) for found blocks, looked up once each
     hist = read_json_retry(HOME / "history.json") or {}
     rw = data.setdefault("_rewards", {})
+    for key in list(rw):
+        rw[key] = {h: r for h, r in rw[key].items() if r.get("v") == 2 or r.get("fees") is None and r.get("subsidy", 0) > 1000}
     for key, cfg in POOLS.items():
         have = rw.setdefault(key, {})
         todo = [b["height"] for b in hist.get("_blockhist", {}).get(key, {}).get("blocks", [])
-                if isinstance(b.get("height"), int) and str(b["height"]) not in have][:15]
+                if isinstance(b.get("height"), int) and (str(b["height"]) not in have or
+                    (have[str(b["height"])].get("v") != 2 and have[str(b["height"])].get("fees") is not None))][:15]
         for h in todo:
             st = rpc(cfg, "getblockstats", str(h), '["subsidy","totalfee"]', timeout=15)
             if isinstance(st, dict) and "subsidy" in st:
-                have[str(h)] = {"subsidy": st["subsidy"], "fees": st.get("totalfee")}
+                c = cfg.get("stats_in_coins", False)
+                have[str(h)] = {"subsidy": to_sats(st["subsidy"], c), "fees": to_sats(st.get("totalfee"), c), "v": 2}
             else:   # pruned / unavailable: subsidy is exact from height, fees unknown
                 have[str(h)] = {"subsidy": (50 * 100_000_000) >> (h // 210_000), "fees": None}
+    # historical USD price for blocks that weren't stamped when found (one CoinGecko request per coin)
+    pr = data.setdefault("_prices", {})
+    if time.time() - (data.get("_prices_try") or 0) > 600:
+        data["_prices_try"] = time.time()
+        for key in POOLS:
+            have = pr.setdefault(key, {})
+            todo = [b for b in hist.get("_blockhist", {}).get(key, {}).get("blocks", [])
+                    if isinstance(b.get("height"), int) and not b.get("price_usd") and str(b["height"]) not in have]
+            if not todo:
+                continue
+            try:
+                pts = price_history(key, min(b["time"] for b in todo), max(b["time"] for b in todo))
+            except Exception as e:
+                print(f"price history {key} failed: {e}", file=sys.stderr)
+                continue
+            for b in todo:
+                near = min(pts, key=lambda p: abs(p[0] - b["time"]), default=None)
+                if near and abs(near[0] - b["time"]) < 6 * 3600:
+                    have[str(b["height"])] = round(near[1], 2)
     tmp = NODE_FILE.with_suffix(".tmp"); tmp.write_text(json.dumps(data)); tmp.replace(NODE_FILE)
 
 
@@ -624,10 +670,13 @@ def collect(key, cfg, history):
     watch_rigs(key, cfg, workers, history, now)
     # only publish rigs that submitted a share in the last 10 minutes
     workers = [w for w in workers if w["lastshare"] and now - w["lastshare"] < OFFLINE_SECS]
+    hp = (nc.get("_prices") or {}).get(key) or {}
     for b in blocks:
+        if not b.get("price_usd") and hp.get(str(b.get("height"))):
+            b["price_usd"], b["price_src"] = hp[str(b["height"])], "hourly"
         r = rws.get(str(b.get("height")))
         if r:
-            b["reward_sats"] = r["subsidy"] + (r["fees"] or 0)
+            b["reward_sats"] = int(r["subsidy"]) + int(r["fees"] or 0)
             b["fees_known"] = r["fees"] is not None
     out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks),
                shares=recent_shares(cfg))
