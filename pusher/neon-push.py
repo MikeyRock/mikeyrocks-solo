@@ -76,10 +76,10 @@ def read_jsonl(path):
     return out
 
 
-def rpc(cfg, *args):
+def rpc(cfg, *args, timeout=30):
     try:
         r = subprocess.run(["docker", "exec", cfg["container"], *cfg["cli"], *args],
-                           capture_output=True, text=True, timeout=30)
+                           capture_output=True, text=True, timeout=timeout)
         return json.loads(r.stdout) if r.returncode == 0 else None
     except Exception:
         return None
@@ -437,8 +437,21 @@ def collect(key, cfg, history):
     out = {"name": cfg["name"], "coin": cfg["coin"], "updated": now}
 
     # --- node ---
-    bci = rpc(cfg, "getblockchaininfo") or {}
+    bci = rpc(cfg, "getblockchaininfo", timeout=20) or {}
     net = rpc(cfg, "getnetworkinfo") or {}
+    cache = history.setdefault("_node", {})
+    if bci:
+        cache[key] = {k: bci.get(k) for k in ("blocks", "headers", "verificationprogress", "initialblockdownload", "difficulty")}
+    else:
+        # node busy (e.g. background snapshot validation makes getblockchaininfo slow): use quick calls
+        cnt = rpc(cfg, "getblockcount", timeout=15)
+        dif = rpc(cfg, "getdifficulty", timeout=15)
+        last = cache.get(key) or {}
+        if isinstance(cnt, int):
+            hdr = max(cnt, last.get("headers") or 0)
+            bci = {"blocks": cnt, "headers": hdr, "difficulty": dif if isinstance(dif, (int, float)) else last.get("difficulty"),
+                   "verificationprogress": last.get("verificationprogress") if cnt < hdr else 1,
+                   "initialblockdownload": bool(last.get("initialblockdownload")) and cnt < hdr}
     out["node"] = {
         "blocks": bci.get("blocks"),
         "headers": bci.get("headers"),
