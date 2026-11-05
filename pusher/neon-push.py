@@ -350,7 +350,7 @@ def push_alert(title, body, tag="block", kind="block"):
 
 def alert_block(key, cfg, b, test=False):
     coin = cfg["coin"]
-    stats = rpc(cfg, "getblockstats", str(b["height"]), '["subsidy","totalfee"]') or {}
+    stats = rpc(cfg, "getblockstats", str(b["height"]), '["subsidy","totalfee"]', timeout=10) or {}
     reward = (stats.get("subsidy") or ((50 * 100_000_000) >> (b["height"] // 210_000))) + (stats.get("totalfee") or 0)
     parts = [f"Rig: {rig_or_default(b['rig'])}"]
     if b.get("diff"):
@@ -433,32 +433,20 @@ def watch_rigs(key, cfg, workers, state, now):
             r["online"] = False
 
 
-def collect(key, cfg, history):
-    now = int(time.time())
-    out = {"name": cfg["name"], "coin": cfg["coin"], "updated": now}
-
-    # --- node ---
+def node_info(key, cfg, cache, now):
+    """Ask the node for height/difficulty/peers and the current block reward (can be slow)."""
+    out = {}
     out_stale = False
-    cache = history.setdefault("_node", {})
-    nodecache = history.setdefault("_nodeout", {})
-    fresh_node = now - (nodecache.get(key, {}).get("_at") or 0) < NODE_EVERY
-    if fresh_node:
-        out["node"] = {k: v for k, v in nodecache[key]["node"].items()}
-        if nodecache[key].get("reward"):
-            out["reward"] = nodecache[key]["reward"]
-    bci = {} if fresh_node else (rpc(cfg, "getblockchaininfo", timeout=20) or {})
-    net = {} if fresh_node else (rpc(cfg, "getnetworkinfo") or {})
-    if fresh_node:
-        pass
-    elif bci:
+    bci = rpc(cfg, "getblockchaininfo", timeout=25) or {}
+    net = rpc(cfg, "getnetworkinfo", timeout=25) or {}
+    if bci:
         cache[key] = {k: bci.get(k) for k in ("blocks", "headers", "verificationprogress", "initialblockdownload", "difficulty")}
     else:
-        # node busy (e.g. background snapshot validation makes getblockchaininfo slow): use quick calls
         cnt = rpc(cfg, "getblockcount", timeout=40)
         dif = rpc(cfg, "getdifficulty", timeout=20) if isinstance(cnt, int) else None
         last = cache.get(key) or {}
         if not isinstance(cnt, int) and last.get("blocks"):
-            cnt = last["blocks"]                      # node too busy to answer: keep last known values
+            cnt = last["blocks"]
             out_stale = True
         if isinstance(cnt, int):
             hdr = max(cnt, last.get("headers") or 0)
@@ -467,31 +455,71 @@ def collect(key, cfg, history):
                    "initialblockdownload": bool(last.get("initialblockdownload")) and cnt < hdr}
             if not out_stale:
                 cache[key] = {**last, "blocks": cnt, "headers": hdr, "difficulty": bci["difficulty"]}
-    if not fresh_node:
-      out["node"] = {
-        "blocks": bci.get("blocks"),
-        "headers": bci.get("headers"),
-        "progress": bci.get("verificationprogress"),
+    out["node"] = {
+        "blocks": bci.get("blocks"), "headers": bci.get("headers"), "progress": bci.get("verificationprogress"),
         "synced": bool(bci) and not bci.get("initialblockdownload", True) and bci.get("blocks") == bci.get("headers"),
-        "difficulty": bci.get("difficulty"),
-        "peers": net.get("connections"),
-        "subversion": net.get("subversion"),
-        "online": bool(bci),
-        "stale": out_stale,
+        "difficulty": bci.get("difficulty"), "peers": net.get("connections"), "subversion": net.get("subversion"),
+        "online": bool(bci), "stale": out_stale,
     }
-
-    # --- reward for the block being mined right now: subsidy + fees in the template ---
-    if not fresh_node and bci.get("blocks") is not None:
+    if bci.get("blocks") is not None:
         height = bci["blocks"] + 1
         subsidy = (50 * 100_000_000) >> (height // 210_000)
-        gbt = rpc(cfg, "getblocktemplate", *cfg.get("gbt", [])) if out["node"]["synced"] else None
+        gbt = rpc(cfg, "getblocktemplate", *cfg.get("gbt", []), timeout=40) if out["node"]["synced"] else None
         total = (gbt or {}).get("coinbasevalue")
-        out["reward"] = {"height": height, "subsidy_sats": subsidy,
-                         "fees_sats": (total - subsidy) if total else None,
+        out["reward"] = {"height": height, "subsidy_sats": subsidy, "fees_sats": (total - subsidy) if total else None,
                          "total_sats": total or subsidy, "live": bool(total)}
+    out["_at"] = now
+    return out
 
-    if not fresh_node:
-        nodecache[key] = {"_at": now, "node": out["node"], "reward": out.get("reward")}
+
+NODE_FILE = HOME / "node.json"
+
+
+def load_node_cache():
+    return read_json_retry(NODE_FILE) or {}
+
+
+def refresh_nodes():
+    """--node-only: one background refresh of every pool's node info into node.json."""
+    import fcntl
+    lock = open(HOME / "node.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return                                   # a refresh is already running
+    data = load_node_cache()
+    cache = data.pop("_cache", {})
+    for key, cfg in POOLS.items():
+        try:
+            data[key] = node_info(key, cfg, cache, int(time.time()))
+        except Exception as e:
+            print(f"node refresh {key} failed: {e}", file=sys.stderr)
+    data["_cache"] = cache
+    tmp = NODE_FILE.with_suffix(".tmp"); tmp.write_text(json.dumps(data)); tmp.replace(NODE_FILE)
+
+
+def kick_node_refresh():
+    """Start a background node refresh if the cache is older than NODE_EVERY (never waits for it)."""
+    d = load_node_cache()
+    ages = [d[k].get("_at", 0) for k in POOLS if isinstance(d.get(k), dict)]
+    if len(ages) == len(POOLS) and time.time() - min(ages) < NODE_EVERY:
+        return
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "--node-only"], start_new_session=True,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "NEON_HOME": str(HOME)})
+
+
+def collect(key, cfg, history):
+    now = int(time.time())
+    out = {"name": cfg["name"], "coin": cfg["coin"], "updated": now}
+
+    # --- node + reward: refreshed by a background job (slow node never delays this run) ---
+    nd = load_node_cache().get(key) or {}
+    out["node"] = nd.get("node") or {"blocks": None, "headers": None, "progress": None, "synced": False,
+                                      "difficulty": None, "peers": None, "subversion": None, "online": False, "stale": True}
+    if nd.get("reward"):
+        out["reward"] = nd["reward"]
+    if nd.get("_at") and now - nd["_at"] > 300:
+        out["node"] = {**out["node"], "stale": True}
 
     # --- pool ---
     status = cfg["pooldir"] / "pool" / "pool.status"
@@ -618,6 +646,10 @@ def publish(token, repo, branch, content):
 
 
 def main():
+    if "--node-only" in sys.argv:
+        HOME.mkdir(parents=True, exist_ok=True)
+        refresh_nodes()
+        return
     import fcntl
     HOME.mkdir(parents=True, exist_ok=True)
     lock = open(HOME / "run.lock", "w")
@@ -652,6 +684,10 @@ def main():
     except Exception:
         history = {}
 
+    if not load_node_cache():
+        refresh_nodes()          # first run ever: fetch node info inline once
+    else:
+        kick_node_refresh()      # later runs: refresh in the background, never wait
     data = {"updated": int(time.time()), "pools": {}}
     for key, cfg in POOLS.items():
         if env.get(f"NEON_SKIP_{key.upper()}") == "1":
