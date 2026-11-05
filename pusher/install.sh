@@ -34,6 +34,7 @@ After=docker.service network-online.target
 Type=oneshot
 Environment=NEON_HOME=$HOME_DIR
 ExecStart=/usr/bin/python3 $HOME_DIR/neon-push.py
+KillMode=process
 EOF
 
 cat > /etc/systemd/system/neon-solo.timer <<EOF
