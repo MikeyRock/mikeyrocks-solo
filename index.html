@@ -152,6 +152,7 @@ tr.offline td.wname::before{color:var(--red)}
 .hscroll td a{color:var(--cyan);text-decoration:none}
 .lucky{color:var(--grn)!important} .unlucky{color:#ff9db0!important}
 table.ht td.h-rw{color:#fff;white-space:nowrap} table.ht td.h-rw small{color:var(--dim);font-size:10px}
+table.ht td.h-rw .rwusd{display:block;color:var(--yel);font-size:11px;margin-top:2px}
 table.ht td.h-rw sup{color:var(--dim);font-size:9px;margin-left:1px} .dimx{color:var(--dim)}
 .cb{font-weight:800;letter-spacing:.1em} .cb.btc{color:var(--btc)} .cb.bch{color:var(--bch)}
 
@@ -550,9 +551,11 @@ function coinMark(key){
 }
 const effCls = e => e<=100 ? "lucky" : "unlucky";
 function rewardCell(b){
+  if(b.reward_sats==null && b.price_usd) b={...b, reward_sats:(50e8/2**Math.floor(b.height/210000)), fees_known:false};
   if(b.reward_sats==null) return '<span class="dimx">…</span>';
   const v=coinAmt(b.reward_sats), C=b.coin.toUpperCase();
-  return b.fees_known ? `${v} <small>${C}</small>` : `<span title="Fees unknown: block no longer on the pruned node">${v}<sup>+?</sup> <small>${C}</small></span>`;
+  const $at = b.price_usd ? `<span class="rwusd" title="${C} price when the block was hit: ${usd(b.price_usd)}">≈ ${usd(b.reward_sats/1e8*b.price_usd)}</span>` : "";
+  return (b.fees_known ? `${v} <small>${C}</small>` : `<span title="Fees unknown: block no longer on the pruned node">${v}<sup>+?</sup> <small>${C}</small></span>`) + $at;
 }
 function renderBlocks(pools){
   const all=[]; for(const k of ["btc","bch"]) for(const b of (pools[k]?.blocks||[])) all.push({...b, coin:k});
@@ -565,6 +568,7 @@ function renderBlocks(pools){
       <div class="lb-f"><div class="k">Rig</div><div class="v rig">${esc(rigOf(b.rig))}</div></div>
       <div class="lb-f"><div class="k">Date hit</div><div class="v">${fmtDate(b.time)}</div></div>
       <div class="lb-f"><div class="k">Ago</div><div class="v">${ago(b.time)}</div></div>
+      ${b.price_usd&&b.reward_sats?`<div class="lb-f"><div class="k">Reward</div><div class="v">${coinAmt(b.reward_sats)} ${b.coin.toUpperCase()} <span style="color:var(--yel)">≈ ${usd(b.reward_sats/1e8*b.price_usd)}</span></div></div>`:""}
       ${b.diff?`<div class="lb-f"><div class="k">Share diff</div><div class="v">${sh(b.diff)}</div></div>`:""}
       ${b.effort!=null?`<div class="lb-f"><div class="k">Effort</div><div class="v ${effCls(b.effort)}">${b.effort.toFixed(1)}%</div></div>`:""}`;
   } else {

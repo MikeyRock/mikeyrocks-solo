@@ -251,6 +251,22 @@ def cleanup_sharelogs(key, cfg, blocks, state, now, dry_run=False):
     return msg
 
 
+COINGECKO_ID = {"btc": "bitcoin", "bch": "bitcoin-cash"}
+
+
+def price_now(key):
+    """Spot USD price right now (used to stamp a newly found block)."""
+    cid = COINGECKO_ID.get(key)
+    try:
+        req = urllib.request.Request(f"https://api.coingecko.com/api/v3/simple/price?ids={cid}&vs_currencies=usd",
+                                     headers={"User-Agent": "mikeyrocks-solo-pusher", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return float(json.loads(r.read())[cid]["usd"])
+    except Exception as e:
+        print(f"price lookup failed for {key}: {e}", file=sys.stderr)
+        return None
+
+
 def read_app_blocks(cfg):
     d = read_json_retry(cfg["pooldir"].parent.parent / "ui" / "state" / "blocks_state.json")
     if d is None:
@@ -620,6 +636,9 @@ def collect(key, cfg, history):
     # --- push alert for blocks found since the last run (skip old ones from the first log read) ---
     for b in new_blocks:
         if now - b["time"] < 2 * 3600:
+            px = price_now(key)
+            if px:
+                b["price_usd"] = px            # stamped at the time the block was hit
             alert_block(key, cfg, b)
 
     # --- history (local file, last 24h of 5m hashrate) ---
