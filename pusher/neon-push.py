@@ -17,6 +17,7 @@ POOLS = {
         "name": "AxeBTC", "coin": "BTC",
         "pooldir": APPDATA / "willitmod-btc/data/pool/www",
         "container": "willitmod-btc_bitcoind_1",
+        "blocks_api": "https://mempool.space/api/v1",   # network block times + winners (keeps load off the BTC node)
         "cli": ["bitcoin-cli", "-datadir=/data"],
         "gbt": ['{"rules":["segwit"]}'],
     },
@@ -685,6 +686,35 @@ def block_times(key, cfg, bt, now):
     return st
 
 
+def http_json(url, timeout=15):
+    req = urllib.request.Request(url, headers={"User-Agent": "mikeyrocks-solo-pusher", "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
+def block_times_api(key, cfg, bt, now):
+    """Same as block_times() but from a mempool.space-style API: /v1/blocks[/:height] -> 15 blocks with extras.pool."""
+    st = bt.setdefault(key, {"hdrs": {}, "tags": {}})
+    base = cfg["blocks_api"].rstrip("/")
+    page, start, calls = http_json(f"{base}/blocks"), None, 1
+    while page and calls < 14:
+        for b in page:
+            st["hdrs"][str(b["height"])] = [int(b["timestamp"]), b["id"]]
+            name = ((b.get("extras") or {}).get("pool") or {}).get("name")
+            if name:
+                st["tags"][b["id"]] = name
+        lowest = min(b["height"] for b in page)
+        oldest_t = min(b["timestamp"] for b in page)
+        if oldest_t < now - BT_WINDOW - 3600 or str(lowest - 1) in st["hdrs"]:
+            break
+        page = http_json(f"{base}/blocks/{lowest - 1}"); calls += 1
+        time.sleep(0.5)
+    st["hdrs"] = {k: v for k, v in st["hdrs"].items() if v[0] >= now - BT_WINDOW - 3600}
+    keep = {v[1] for v in st["hdrs"].values()}
+    st["tags"] = {k: v for k, v in st["tags"].items() if k in keep}
+    return st
+
+
 def refresh_nodes():
     """--node-only: one background refresh of every pool's node info into node.json."""
     import fcntl
@@ -740,9 +770,9 @@ def refresh_nodes():
     # network block times + recent winners (pools with "blocktimes")
     btd = data.setdefault("_bt", {})
     for key, cfg in POOLS.items():
-        if cfg.get("blocktimes"):
+        if cfg.get("blocks_api") or cfg.get("blocktimes"):
             try:
-                block_times(key, cfg, btd, int(time.time()))
+                (block_times_api if cfg.get("blocks_api") else block_times)(key, cfg, btd, int(time.time()))
             except Exception as e:
                 print(f"block times {key} failed: {e}", file=sys.stderr)
 
