@@ -500,8 +500,9 @@ def node_info(key, cfg, cache, now):
         "difficulty": bci.get("difficulty"), "peers": net.get("connections"), "subversion": net.get("subversion"),
         "online": bool(bci), "stale": out_stale,
     }
-    # network hashrate implied by the current difficulty (what other pools show; steadier than getnetworkhashps)
-    nh = bci["difficulty"] * 2 ** 32 / 600 if isinstance(bci.get("difficulty"), (int, float)) else None
+    nh = rpc(cfg, "getnetworkhashps", timeout=25)
+    if not isinstance(nh, (int, float)) and isinstance(bci.get("difficulty"), (int, float)):
+        nh = bci["difficulty"] * 2 ** 32 / 600          # estimate from difficulty (600 s target)
     out["node"]["nethash"] = float(nh) if isinstance(nh, (int, float)) else None
     if bci.get("blocks") is not None:
         height = bci["blocks"] + 1
