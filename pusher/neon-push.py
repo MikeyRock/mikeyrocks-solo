@@ -785,7 +785,7 @@ def collect(key, cfg, history):
     netd = (out.get("node") or {}).get("difficulty")
     if rd:
         out["round"] = {"start": rd.get("start"), "work": rd.get("work"),
-                        "effort": round(rd["work"] / netd * 100, 2) if rd.get("work") is not None and netd else None,
+                        "effort": round(rd["work"] / netd * 100, 5) if rd.get("work") is not None and netd else None,
                         "partial": not rd.get("caught_up", True)}
         out["near"] = rd.get("near", [])
     out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks),

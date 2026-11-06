@@ -753,7 +753,7 @@ function effortHTML(p, now){
   const e=r.effort, c=e<=100?"g":e<=200?"y":"r", since=r.start?dur(now-r.start):"";
   const w=Math.min(e,300)/300*100;
   return `<div class="eh"><span class="k">Round effort${since?` · ${since} since last block`:""}</span>
-    <span class="ev ${c}">${e>=10?e.toFixed(1):e.toFixed(2)}%</span></div>
+    <span class="ev ${c}">${e>=10?e.toFixed(1):e>=1?e.toFixed(2):e>=0.01?e.toFixed(3):e>0?"<0.01":"0"}%</span></div>
     <div class="ebar"><i class="${c}" style="width:${w}%"></i><b style="left:${100/3}%"></b></div>
     <div class="escale"><span>0%</span><span class="m100">100% · 1 block of work</span><span>300%+</span></div>
     ${r.partial?'<div class="es">still counting this round from the share logs…</div>':""}`;
