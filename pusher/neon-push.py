@@ -522,6 +522,92 @@ def load_node_cache():
     return read_json_retry(NODE_FILE) or {}
 
 
+SCAN_FILE = HOME / "scan.json"
+NEAR_KEEP = 10
+SCAN_BUDGET = 40 * 1024 * 1024        # bytes of sharelog read per background run (backfill catches up over a few runs)
+
+
+def scan_sharelogs(key, cfg, st, netdiff, rstart, now):
+    """Read new sharelog lines since last time. Keeps:
+       - near: top NEAR_KEEP shares by share diff / network diff (below 100%, i.e. not blocks)
+       - effort_sum: sum of credited share difficulty since the round started (for round effort)"""
+    ps = st.setdefault(key, {"files": {}, "near": [], "effort_sum": 0.0, "round": None})
+    oldest = now - KEEP_SHARELOG_DAYS * 86400
+    try:
+        dirs = [d for d in cfg["pooldir"].iterdir() if d.is_dir() and re.fullmatch(r"[0-9a-f]{8}", d.name)
+                and d.stat().st_mtime >= oldest]
+    except Exception:
+        return ps
+    if rstart and ps.get("round") != rstart:               # new round (block found / reset): start counting again
+        first = ps.get("round") is None
+        ps["round"], ps["effort_sum"] = rstart, 0.0
+        for k in list(ps["files"]):                         # re-read only files written since the round began
+            try:
+                if first or Path(k).stat().st_mtime >= rstart - 60:
+                    ps["files"][k] = 0
+            except Exception:
+                pass
+    files = []
+    for d in dirs:
+        try:
+            files += [f for f in d.glob("*.sharelog")]
+        except Exception:
+            pass
+    try:
+        files.sort(key=lambda f: f.stat().st_mtime)
+    except Exception:
+        pass
+    budget, seen = SCAN_BUDGET, set()
+    near = ps["near"]
+    for f in files:
+        k = str(f); seen.add(k)
+        try:
+            size = f.stat().st_size
+        except Exception:
+            continue
+        off = ps["files"].get(k, 0)
+        if size <= off:
+            continue
+        if budget <= 0:
+            break
+        try:
+            with open(f, "rb") as fh:
+                fh.seek(off); chunk = fh.read(min(size - off, budget))
+        except Exception:
+            continue
+        cut = chunk.rfind(b"\n") + 1
+        if cut == 0:
+            continue
+        ps["files"][k] = off + cut; budget -= cut
+        for line in chunk[:cut].decode("utf-8", "replace").splitlines():
+            try:
+                j = json.loads(line)
+            except Exception:
+                continue
+            if not j.get("result"):
+                continue
+            try:
+                t = int(str(j.get("createdate", "")).split(",")[0])
+            except ValueError:
+                continue
+            sd = float(j.get("sdiff") or 0)
+            if rstart is None or t >= rstart:
+                ps["effort_sum"] += float(j.get("diff") or 0)
+            if netdiff and sd < netdiff and (len(near) < NEAR_KEEP or sd / netdiff > near[-1]["pct"] / 100):
+                near.append({"t": t, "rig": rig_name(str(j.get("workername", ""))), "sdiff": round(sd, 2),
+                             "pct": round(sd / netdiff * 100, 4), "dev": device_name(j.get("agent"))})
+                near.sort(key=lambda x: -x["pct"])
+                # one entry per share (same share can't appear twice, but guard against re-reads)
+                uniq, out_ = set(), []
+                for x in near:
+                    if (x["t"], x["rig"], x["sdiff"]) not in uniq:
+                        uniq.add((x["t"], x["rig"], x["sdiff"])); out_.append(x)
+                ps["near"] = near = out_[:NEAR_KEEP]
+    ps["files"] = {k: v for k, v in ps["files"].items() if k in seen}   # forget deleted files
+    ps["caught_up"] = budget > 0
+    return ps
+
+
 def refresh_nodes():
     """--node-only: one background refresh of every pool's node info into node.json."""
     import fcntl
@@ -574,6 +660,19 @@ def refresh_nodes():
                 near = min(pts, key=lambda p: abs(p[0] - b["time"]), default=None)
                 if near and abs(near[0] - b["time"]) < 6 * 3600:
                     have[str(b["height"])] = round(near[1], 2)
+    # near misses + round effort from the sharelogs
+    scan = read_json_retry(SCAN_FILE) or {}
+    rounds = data.setdefault("_round", {})
+    for key, cfg in POOLS.items():
+        nd = (data.get(key) or {}).get("node") or {}
+        blocks = hist.get("_blockhist", {}).get(key, {}).get("blocks", [])
+        rs = round_start(cfg, blocks)
+        try:
+            ps = scan_sharelogs(key, cfg, scan, nd.get("difficulty"), rs, int(time.time()))
+        except Exception as e:
+            print(f"sharelog scan {key} failed: {e}", file=sys.stderr); continue
+        rounds[key] = {"start": rs, "work": ps.get("effort_sum"), "near": ps.get("near", []), "caught_up": ps.get("caught_up")}
+    stmp = SCAN_FILE.with_suffix(".tmp"); stmp.write_text(json.dumps(scan)); stmp.replace(SCAN_FILE)
     tmp = NODE_FILE.with_suffix(".tmp"); tmp.write_text(json.dumps(data)); tmp.replace(NODE_FILE)
 
 
@@ -594,6 +693,7 @@ def collect(key, cfg, history):
     # --- node + reward: refreshed by a background job (slow node never delays this run) ---
     nc = load_node_cache()
     nd = nc.get(key) or {}
+    rd = (nc.get("_round") or {}).get(key) or {}
     rws = (nc.get("_rewards") or {}).get(key) or {}
     out["node"] = nd.get("node") or {"blocks": None, "headers": None, "progress": None, "synced": False,
                                       "difficulty": None, "peers": None, "subversion": None, "online": False, "stale": True}
@@ -682,6 +782,12 @@ def collect(key, cfg, history):
         if r:
             b["reward_sats"] = int(r["subsidy"]) + int(r["fees"] or 0)
             b["fees_known"] = r["fees"] is not None
+    netd = (out.get("node") or {}).get("difficulty")
+    if rd:
+        out["round"] = {"start": rd.get("start"), "work": rd.get("work"),
+                        "effort": round(rd["work"] / netd * 100, 2) if rd.get("work") is not None and netd else None,
+                        "partial": not rd.get("caught_up", True)}
+        out["near"] = rd.get("near", [])
     out.update(pool=pool, workers=workers, payout=payout, blocks=blocks, blocks_found=len(blocks),
                shares=recent_shares(cfg))
     cleanup_sharelogs(key, cfg, blocks, history, now, dry_run="--cleanup-dry-run" in sys.argv)
@@ -700,6 +806,63 @@ def collect(key, cfg, history):
         h.append([now, hrs["5m"], out["node"].get("nethash")])
     history[key] = h
     out["history"] = h
+    return out
+
+
+RENTALS_FILE = HOME / "rentals.json"
+
+
+def parse_when(v, tz):
+    """'2026-11-05 02:00' (local time in tz) or unix seconds -> unix seconds. None/'' -> None."""
+    if v in (None, "", "now"):
+        return None
+    if isinstance(v, (int, float)):
+        return int(v)
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    v = str(v).strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return int(datetime.strptime(v, fmt).replace(tzinfo=ZoneInfo(tz)).timestamp())
+        except ValueError:
+            continue
+    return None
+
+
+def rentals(pools_out, env):
+    """Rental scoreboard from rentals.json: cost vs what that rig found during the rental window."""
+    raw = read_json_retry(RENTALS_FILE)
+    if not isinstance(raw, list):
+        return []
+    tz, now, out = env.get("NEON_TZ", "America/Los_Angeles"), int(time.time()), []
+    for r in raw:
+        if not isinstance(r, dict):
+            continue
+        coin = str(r.get("coin", "")).lower()
+        start, end = parse_when(r.get("start"), tz), parse_when(r.get("end"), tz)
+        rigs = [x.lower() for x in (r.get("rig") if isinstance(r.get("rig"), list) else [r.get("rig") or "*"])]
+        if not start or coin not in pools_out:
+            continue
+        won, usd_, sats, priced = [], 0.0, 0, True
+        for b in pools_out[coin].get("blocks", []):
+            if b["time"] < start or (end and b["time"] > end):
+                continue
+            if "*" not in rigs and str(b.get("rig", "")).lower() not in rigs:
+                continue
+            rs = b.get("reward_sats") or ((50 * 100_000_000) >> (b["height"] // 210_000))
+            sats += rs
+            if b.get("price_usd"):
+                usd_ += rs / 1e8 * b["price_usd"]
+            else:
+                priced = False
+            won.append(b["height"])
+        cost = float(r.get("cost_usd") or 0)
+        out.append({"name": str(r.get("name") or r.get("rig") or "Rental")[:40], "coin": coin,
+                    "rig": r.get("rig") or "*", "start": start, "end": end, "active": not end or end > now,
+                    "cost_usd": round(cost, 2), "blocks": len(won), "heights": won[:20],
+                    "earned_sats": sats, "earned_usd": round(usd_, 2), "priced": priced,
+                    "net_usd": round(usd_ - cost, 2), "roi": round((usd_ - cost) / cost * 100, 1) if cost else None})
+    out.sort(key=lambda x: -(x["start"] or 0))
     return out
 
 
@@ -786,6 +949,7 @@ def main():
             continue
         data["pools"][key] = collect(key, cfg, history)
     history.pop("_blocks", None)   # old counter format
+    data["rentals"] = rentals(data["pools"], env)
     hist_file.write_text(json.dumps(history))
     content = json.dumps(data, separators=(",", ":"))
     (HOME / "stats.json").write_text(content)

@@ -42,3 +42,17 @@ If the page shows **DEMO DATA**, it hasn't received a `stats.json` from the Umbr
 - Umbrel: add `NEON_PUSH_URL=` and `NEON_PUSH_TOKEN=` to `/home/umbrel/neon-solo/config.env`
 - Test: `sudo python3 /home/umbrel/neon-solo/neon-push.py --test-alert`
 - iPhone: Safari → Share → **Add to Home Screen**, open it from the home screen, then tap 🔔 (needs iOS 16.4+)
+
+## Rental scoreboard
+
+Put your hashrate rentals in `/home/umbrel/neon-solo/rentals.json` on the Umbrel. Blocks found by that rig name, on that coin, between `start` and `end`, count toward each rental:
+
+```json
+[
+  {"name": "MRR 84 PH/s · Nov 5", "rig": "MRR",   "coin": "bch", "start": "2026-11-05 00:00", "end": "2026-11-05 12:00", "cost_usd": 1200},
+  {"name": "80 PH/s rental",      "rig": "80Phs", "coin": "bch", "start": "2026-11-05 12:00", "end": "",                 "cost_usd": 950}
+]
+```
+
+- Times are local (`NEON_TZ` in config.env, default `America/Los_Angeles`). Leave `end` empty for a rental that's still running.
+- `rig` is the worker name as it appears on the site. Use `"*"` to count every block on that coin during the window, or a list such as `["MRR", "80Phs"]`.

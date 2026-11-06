@@ -268,6 +268,53 @@ button.glyph:hover{transform:scale(1.07)} button.glyph:active{transform:scale(.9
 .dockmark{width:38px;height:38px;flex:none;opacity:.8;filter:grayscale(.35) drop-shadow(0 0 6px color-mix(in srgb,var(--c) 50%,transparent))}
 .dockmark svg{width:100%;height:100%;display:block}
 
+/* round effort meter */
+.effort{margin:12px 0 4px;padding:10px 14px;border:1px solid var(--line);background:#0006}
+.effort .eh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.effort .k{font-size:10px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase}
+.effort .ev{font-family:Orbitron,"Arial Black",sans-serif;font-weight:900;font-size:22px}
+.effort .ev.g{color:var(--grn);text-shadow:0 0 10px #39ff8866} .effort .ev.y{color:var(--yel);text-shadow:0 0 10px #f5ff3b66} .effort .ev.r{color:#ff6b8a;text-shadow:0 0 10px #ff3b5c66}
+.effort .es{font-size:11px;color:var(--dim)}
+.ebar{position:relative;height:8px;background:#141a2b;margin-top:8px;overflow:hidden}
+.ebar i{position:absolute;inset:0 auto 0 0;transition:width .6s}
+.ebar i.g{background:linear-gradient(90deg,#39ff8855,var(--grn))} .ebar i.y{background:linear-gradient(90deg,#39ff8855,var(--yel))} .ebar i.r{background:linear-gradient(90deg,#39ff8855,var(--yel) 40%,#ff3b5c)}
+.ebar b{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;box-shadow:0 0 6px #fff}
+.escale{position:relative;display:flex;justify-content:space-between;font-size:9.5px;color:var(--dim);margin-top:3px}
+.escale .m100{position:absolute;left:33.333%;transform:translateX(-50%);white-space:nowrap;color:#d7e3ff}
+
+/* near misses */
+.near,.rentals{margin-top:30px;border:1px solid var(--line);background:var(--panel);padding:20px 22px}
+.near .top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.near h2,.rentals h2{font-family:Orbitron,"Arial Black",sans-serif;font-size:14px;letter-spacing:.32em;text-transform:uppercase}
+.near h2{color:var(--yel);text-shadow:0 0 10px #f5ff3b88} .rentals h2{color:var(--grn);text-shadow:0 0 10px #39ff8888;margin-bottom:14px}
+.near .note{font-size:11px;color:var(--dim);margin-top:10px}
+.nm{display:grid;grid-template-columns:34px 48px minmax(90px,1fr) 90px minmax(140px,2fr) 185px;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #121829;font-size:13px}
+.nm .rk{font-family:Orbitron,"Arial Black",sans-serif;font-weight:900;color:var(--dim)}
+.nm:nth-child(1) .rk{color:var(--yel);text-shadow:0 0 8px #f5ff3b88} .nm:nth-child(2) .rk{color:#d7e3ff} .nm:nth-child(3) .rk{color:#ff9d1c}
+.nm .rg{color:var(--grn)} .nm .sd{color:#fff;font-weight:600;text-align:right} .nm .dt{color:var(--dim);font-size:11.5px;text-align:right;white-space:nowrap}
+.nm .pc{display:flex;align-items:center;gap:8px}
+.nm .cbm{display:none}
+.nm .pc span{min-width:62px;text-align:right;font-weight:700;color:var(--yel)}
+.nm .pc em{flex:1;height:6px;background:#141a2b;position:relative;overflow:hidden}
+.nm .pc em i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--cyan),var(--yel))}
+
+/* rentals */
+.rtot{display:flex;flex-wrap:wrap;gap:8px 26px;font-size:12px;color:var(--dim);letter-spacing:.08em;margin-bottom:14px}
+.rtot b{color:#fff;font-size:15px;margin-left:6px} .rtot b.pos{color:var(--grn)} .rtot b.neg{color:#ff6b8a}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.rc{--c:var(--bch);border:1px solid var(--line);background:#070910;padding:14px 16px;position:relative}
+.rc.btc{--c:var(--btc)}
+.rc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c);box-shadow:0 0 10px var(--c)}
+.rc .rn{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.rc .rn b{color:#fff;font-size:14px} .rc .live{font-size:10px;letter-spacing:.18em;color:var(--grn);border:1px solid #39ff8866;padding:2px 6px}
+.rc .rw{font-size:11px;color:var(--dim);margin:4px 0 10px}
+.rc .rr{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.rc .rr div{font-size:10px;color:var(--dim);letter-spacing:.15em;text-transform:uppercase}
+.rc .rr b{display:block;font-size:15px;color:#fff;letter-spacing:0;text-transform:none;margin-top:3px}
+.rc .net{margin-top:10px;font-family:Orbitron,"Arial Black",sans-serif;font-weight:900;font-size:20px}
+.rc .net.pos{color:var(--grn);text-shadow:0 0 10px #39ff8866} .rc .net.neg{color:#ff6b8a}
+.rc .net small{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--dim);font-weight:400;margin-left:8px}
+
 /* ===== phone layout ===== */
 .wrap{padding-top:max(28px, calc(env(safe-area-inset-top) + 12px));padding-left:max(20px, env(safe-area-inset-left));padding-right:max(20px, env(safe-area-inset-right));padding-bottom:max(60px, calc(env(safe-area-inset-bottom) + 24px))}
 table.wt td.meta{display:none}
@@ -321,6 +368,9 @@ table.st .s-meta{display:none}
   html::-webkit-scrollbar,body::-webkit-scrollbar,.hscroll::-webkit-scrollbar{display:none;width:0;height:0}
   table.ht.collapsed tr:nth-child(n+9){display:none}
   .history .more{display:block}
+  .near,.rentals{padding:16px}
+  .nm{grid-template-columns:28px minmax(0,1fr) auto;grid-template-areas:"rk rg sd" "rk pc pc" "rk dt dt";gap:3px 10px}
+  .nm .rk{grid-area:rk} .nm .cn{display:none} .nm .cbm{display:inline} .nm .rg{grid-area:rg} .nm .sd{grid-area:sd} .nm .pc{grid-area:pc} .nm .dt{grid-area:dt;text-align:left}
   .shares{padding:16px}
   .sscroll{max-height:none;overflow:visible}
   table.st thead{display:none} table.st, table.st tbody{display:block}
@@ -389,6 +439,19 @@ table.st .s-meta{display:none}
     <div class="note">💎 = share that solved a block · luck = share diff ÷ pool target · net % = share diff ÷ network difficulty · refreshes every 15 s</div>
   </section>
 
+  <section class="near">
+    <div class="top"><h2>// Near misses</h2>
+      <div class="tabs" id="nearTabs"><button data-c="all" class="on">ALL</button><button data-c="btc">BTC</button><button data-c="bch">BCH</button></div></div>
+    <div id="nearlist"></div>
+    <div class="note">Closest shares to a block in the last 14 days · % = share diff ÷ network difficulty (100% = block)</div>
+  </section>
+
+  <section class="rentals" id="rentals" hidden>
+    <h2>// Rental scoreboard</h2>
+    <div class="rtot" id="rtot"></div>
+    <div class="rgrid" id="rgrid"></div>
+  </section>
+
   <section class="history">
     <h2>// Block history</h2>
     <div class="hscroll" id="history"></div>
@@ -417,6 +480,7 @@ table.st .s-meta{display:none}
     <div class="hero-k">Pool hashrate · 5m</div>
     <div class="hero"><span class="big" data-f="hr"></span><span class="unit" data-f="hrU"></span></div>
     <div class="reward" data-f="reward"></div>
+    <div class="effort" data-f="effort"></div>
     <div class="netline" data-f="netline"></div>
     <canvas data-f="chart"></canvas>
 
@@ -521,6 +585,7 @@ function renderPool(key, p, now){
   else { tag.className="tag ok"; tag.textContent="● mining"; }
   const [v,u] = si(hr["5m"] ?? hr["1m"]); f("hr").textContent=v; f("hrU").textContent=u?u+"H/s":"";
   f("reward").innerHTML = rewardHTML(key, p.reward);
+  f("effort").innerHTML = effortHTML(p, now); f("effort").hidden = !p.round || p.round.effort==null;
   f("hr1h").textContent=hs(hr["1h"]); f("hr1d").textContent=hs(hr["1d"]);
   f("workers").textContent=num((p.workers||[]).filter(w=>isOn(w,now)).length);
   if(pool.bestshare>0) f("best").innerHTML=`${sh(pool.bestshare)}${pool.bestshare_rig?` <span style="font-size:11px;color:var(--dim);font-weight:400">by ${esc(pool.bestshare_rig)}</span>`:""}`;
@@ -634,6 +699,7 @@ function render(d, demo){
   draws.forEach(f=>f());
   renderBlocks(pools);
   renderShares(pools);
+  renderNear(pools); renderRentals(d.rentals);
   if(!demo) checkCelebration(pools);
   const [hv,hu]=si(tH); $("#tHash").innerHTML=`${hv}<small>${hu}H/s</small>`;
   $("#tWork").textContent=num(tW); $("#tBest").textContent=sh(tBest); $("#tBlocks").textContent=num(tBlk);
@@ -700,6 +766,48 @@ function renderDock(pools){
   dock.innerHTML = ks.map(k=>`<button class="dockbtn ${k}" type="button" data-k="${k}" title="Show ${esc(pools[k].name||k)}">
       <span class="dockmark">${coinMark(k)}</span><span><b>${esc(pools[k].name||k.toUpperCase())}</b> hidden<small>tap to show</small></span></button>`).join("");
   dock.querySelectorAll("button").forEach(b=>b.onclick=()=>togglePool(b.dataset.k));
+}
+
+
+/* ===== round effort ===== */
+function effortHTML(p, now){
+  const r=p.round; if(!r || r.effort==null) return "";
+  const e=r.effort, c=e<=100?"g":e<=200?"y":"r", since=r.start?dur(now-r.start):"";
+  const w=Math.min(e,300)/300*100;
+  return `<div class="eh"><span class="k">Round effort${since?` · ${since} since last block`:""}</span>
+    <span class="ev ${c}">${e>=10?e.toFixed(1):e.toFixed(2)}%</span></div>
+    <div class="ebar"><i class="${c}" style="width:${w}%"></i><b style="left:${100/3}%"></b></div>
+    <div class="escale"><span>0%</span><span class="m100">100% · 1 block of work</span><span>300%+</span></div>
+    ${r.partial?'<div class="es">still counting this round from the share logs…</div>':""}`;
+}
+
+/* ===== near misses ===== */
+let nearCoin="all";
+function renderNear(pools){
+  const rows=[]; for(const k of ["btc","bch"]){ if(nearCoin!=="all"&&nearCoin!==k) continue; for(const x of (pools[k]?.near||[])) rows.push({...x,coin:k}); }
+  rows.sort((a,b)=>b.pct-a.pct);
+  const top=rows.slice(0,10), max=top[0]?.pct||1;
+  $("#nearlist").innerHTML = top.length ? top.map((x,i)=>`<div class="nm"><span class="rk">#${i+1}</span><span class="cn"><span class="cb ${x.coin}">${x.coin.toUpperCase()}</span></span>
+    <span class="rg">${esc(x.rig)}</span><span class="sd">${sh(x.sdiff)}</span>
+    <span class="pc"><span>${x.pct>=1?x.pct.toFixed(2):x.pct.toFixed(3)}%</span><em><i style="width:${Math.max(2,x.pct)}%"></i></em></span>
+    <span class="dt"><span class="cbm cb ${x.coin}">${x.coin.toUpperCase()} · </span>${fmtDate(x.t)}</span></div>`).join("")
+    : '<div class="empty">Collecting from the share logs…</div>';
+}
+document.querySelectorAll("#nearTabs button").forEach(b=>b.addEventListener("click",()=>{ nearCoin=b.dataset.c;
+  document.querySelectorAll("#nearTabs button").forEach(x=>x.classList.toggle("on",x===b)); if(lastRender) renderNear(lastRender[0].pools||{}); }));
+
+/* ===== rental scoreboard ===== */
+function renderRentals(list){
+  const sec=$("#rentals"); if(!list||!list.length){ sec.hidden=true; return; } sec.hidden=false;
+  const cost=list.reduce((a,r)=>a+r.cost_usd,0), won=list.reduce((a,r)=>a+r.earned_usd,0), blk=list.reduce((a,r)=>a+r.blocks,0), net=won-cost;
+  $("#rtot").innerHTML=`<span>Rentals<b>${list.length}</b></span><span>Spent<b>${usd(cost)}</b></span><span>Won<b>${usd(won)}</b></span><span>Blocks<b>${blk}</b></span>
+    <span>Net<b class="${net>=0?"pos":"neg"}">${net>=0?"+":"−"}${usd(Math.abs(net))}</b></span>${cost?`<span>ROI<b class="${net>=0?"pos":"neg"}">${(net/cost*100).toFixed(1)}%</b></span>`:""}`;
+  $("#rgrid").innerHTML=list.map(r=>{ const pos=r.net_usd>=0, C=r.coin.toUpperCase();
+    const when=`${fmtDate(r.start)} → ${r.end?fmtDate(r.end):"now"}`;
+    return `<div class="rc ${r.coin}"><div class="rn"><b>${esc(r.name)}</b>${r.active?'<span class="live">LIVE</span>':""}</div>
+      <div class="rw">${C} · rig ${esc(String(r.rig))} · ${when}</div>
+      <div class="rr"><div>Cost<b>${usd(r.cost_usd)}</b></div><div>Won<b>${usd(r.earned_usd)}${r.priced?"":"+"}</b></div><div>Blocks<b>${r.blocks}</b></div></div>
+      <div class="net ${pos?"pos":"neg"}">${pos?"+":"−"}${usd(Math.abs(r.net_usd))}<small>${r.roi!=null?`ROI ${r.roi>0?"+":""}${r.roi}%`:""}</small></div></div>`; }).join("");
 }
 
 /* ===== live share log ===== */
