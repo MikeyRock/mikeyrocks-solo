@@ -809,63 +809,6 @@ def collect(key, cfg, history):
     return out
 
 
-RENTALS_FILE = HOME / "rentals.json"
-
-
-def parse_when(v, tz):
-    """'2026-11-05 02:00' (local time in tz) or unix seconds -> unix seconds. None/'' -> None."""
-    if v in (None, "", "now"):
-        return None
-    if isinstance(v, (int, float)):
-        return int(v)
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    v = str(v).strip().replace("T", " ")
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
-        try:
-            return int(datetime.strptime(v, fmt).replace(tzinfo=ZoneInfo(tz)).timestamp())
-        except ValueError:
-            continue
-    return None
-
-
-def rentals(pools_out, env):
-    """Rental scoreboard from rentals.json: cost vs what that rig found during the rental window."""
-    raw = read_json_retry(RENTALS_FILE)
-    if not isinstance(raw, list):
-        return []
-    tz, now, out = env.get("NEON_TZ", "America/Los_Angeles"), int(time.time()), []
-    for r in raw:
-        if not isinstance(r, dict):
-            continue
-        coin = str(r.get("coin", "")).lower()
-        start, end = parse_when(r.get("start"), tz), parse_when(r.get("end"), tz)
-        rigs = [x.lower() for x in (r.get("rig") if isinstance(r.get("rig"), list) else [r.get("rig") or "*"])]
-        if not start or coin not in pools_out:
-            continue
-        won, usd_, sats, priced = [], 0.0, 0, True
-        for b in pools_out[coin].get("blocks", []):
-            if b["time"] < start or (end and b["time"] > end):
-                continue
-            if "*" not in rigs and str(b.get("rig", "")).lower() not in rigs:
-                continue
-            rs = b.get("reward_sats") or ((50 * 100_000_000) >> (b["height"] // 210_000))
-            sats += rs
-            if b.get("price_usd"):
-                usd_ += rs / 1e8 * b["price_usd"]
-            else:
-                priced = False
-            won.append(b["height"])
-        cost = float(r.get("cost_usd") or 0)
-        out.append({"name": str(r.get("name") or r.get("rig") or "Rental")[:40], "coin": coin,
-                    "rig": r.get("rig") or "*", "start": start, "end": end, "active": not end or end > now,
-                    "cost_usd": round(cost, 2), "blocks": len(won), "heights": won[:20],
-                    "earned_sats": sats, "earned_usd": round(usd_, 2), "priced": priced,
-                    "net_usd": round(usd_ - cost, 2), "roi": round((usd_ - cost) / cost * 100, 1) if cost else None})
-    out.sort(key=lambda x: -(x["start"] or 0))
-    return out
-
-
 def gh(token, method, url, body=None):
     req = urllib.request.Request("https://api.github.com" + url, method=method,
                                  data=json.dumps(body).encode() if body is not None else None,
@@ -949,7 +892,6 @@ def main():
             continue
         data["pools"][key] = collect(key, cfg, history)
     history.pop("_blocks", None)   # old counter format
-    data["rentals"] = rentals(data["pools"], env)
     hist_file.write_text(json.dumps(history))
     content = json.dumps(data, separators=(",", ":"))
     (HOME / "stats.json").write_text(content)
