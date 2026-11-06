@@ -420,7 +420,7 @@ table.st .s-meta{display:none}
     <div class="top"><h2>// Live share log</h2>
       <div class="tabs" id="shareTabs"><button data-c="all" class="on">ALL</button><button data-c="btc">BTC</button><button data-c="bch">BCH</button></div></div>
     <div class="sscroll" id="sharelog"></div>
-    <div class="note">💎 = share that solved a block · luck = share diff ÷ pool target · net % = share diff ÷ network difficulty · refreshes every 15 s</div>
+    <div class="note">💎 = share that solved a block · luck = share diff ÷ pool target · net % = share diff ÷ network difficulty · refreshes every 10 s</div>
   </section>
 
   <section class="near">
@@ -494,7 +494,7 @@ table.st .s-meta{display:none}
 const FAST_URL = "https://mikeyrocks-solo-push.seoxoner.workers.dev/stats";   // ~15 s fresh, via the Worker
 const API_URL  = "https://api.github.com/repos/MikeyRock/mikeyrocks-solo/contents/stats.json?ref=data";
 const DATA_URL = "https://raw.githubusercontent.com/MikeyRock/mikeyrocks-solo/data/stats.json";
-const REFRESH_MS = 15_000;
+const REFRESH_MS = 10_000;
 const STALE_AFTER = 15 * 60;           // seconds
 /* ================== */
 
