@@ -537,7 +537,7 @@ function drawChart(cv, pts, color){
 }
 
 function netLine(p){
-  const n=p.node?.nethash; if(!n) return "";
+  const n=(p.node?.difficulty ? p.node.difficulty*2**32/600 : p.node?.nethash); if(!n) return "";
   const np=(p.history||[]).filter(x=>x[2]>0);
   let ch=""; if(np.length>1){ const a=np[0][2], b=np[np.length-1][2], pct=(b-a)/a*100, hrs=Math.max(1,Math.round((np[np.length-1][0]-np[0][0])/3600));
     ch=`<span class="${pct>=0?"up":"dn"}">${pct>=0?"▲ +":"▼ "}${pct.toFixed(2)}% · ${hrs} h</span>`; }
