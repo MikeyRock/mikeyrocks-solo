@@ -27,6 +27,7 @@ POOLS = {
         "cli": ["bitcoin-cli", "-datadir=/data"],
         "gbt": [],
         "stats_in_coins": True,          # BCHN getblockstats reports BCH, not satoshis
+        "blocktimes": True,              # show network block times + recent block winners
     },
 }
 HISTORY_SECS = 24 * 3600
@@ -76,6 +77,16 @@ def read_jsonl(path):
             except json.JSONDecodeError:
                 pass
     return out
+
+
+def rpc_raw(cfg, *args, timeout=30):
+    """RPC whose output is a bare string (e.g. getbestblockhash)."""
+    try:
+        r = subprocess.run(["docker", "exec", cfg["container"], *cfg["cli"], *args],
+                           capture_output=True, text=True, timeout=timeout)
+        return r.stdout.strip() if r.returncode == 0 else None
+    except Exception:
+        return None
 
 
 def rpc(cfg, *args, timeout=30):
@@ -608,6 +619,72 @@ def scan_sharelogs(key, cfg, st, netdiff, rstart, now):
     return ps
 
 
+BT_WINDOW = 24 * 3600
+KNOWN_TAGS = {"viabtc": "ViaBTC", "mining-dutch": "Mining-Dutch", "ckpool": "ckpool", "f2pool": "F2Pool",
+              "antpool": "AntPool", "binance": "Binance Pool", "btc.com": "BTC.com", "poolin": "Poolin",
+              "emcd": "EMCD", "foundry": "Foundry", "kano": "KanoPool", "prohashing": "Prohashing",
+              "zergpool": "Zergpool", "solopool": "Solo Pool", "sbicrypto": "SBI Crypto", "molepool": "Molepool",
+              "secpool": "SECPOOL", "luxor": "Luxor", "spiderpool": "SpiderPool", "nicehash": "NiceHash",
+              "unmineable": "unMineable", "2miners": "2Miners", "fenix": "FenixPool", "solofury": "SoloFury",
+              "public-pool": "Public Pool", "bitdeer": "Bitdeer", "huobi": "Huobi", "okex": "OKExPool"}
+
+
+def coinbase_tag(hexsig):
+    """Best guess at the miner's tag from the coinbase scriptSig (what explorers show as 'mined by')."""
+    try:
+        raw = bytes.fromhex(hexsig)
+    except Exception:
+        return None
+    txt = raw.decode("latin-1")
+    low = txt.lower()
+    for k, name in KNOWN_TAGS.items():
+        if k in low:
+            return name
+    runs = re.findall(r"[A-Za-z0-9 ._/@:-]{4,}", txt)
+    runs = [r.strip(" /._-:") for r in runs if sum(c.isalpha() for c in r) >= 3]
+    for r in runs:
+        for part in r.split("/"):
+            part = part.strip()
+            if len(part) >= 3 and sum(c.isalpha() for c in part) >= 3:
+                return part[:24]
+    return None
+
+
+def block_times(key, cfg, bt, now):
+    """Keep [height, time, hash] for every network block in the last 24 h (headers only) and a tag for the newest few."""
+    st = bt.setdefault(key, {"hdrs": {}, "tags": {}})
+    best = rpc_raw(cfg, "getbestblockhash", timeout=20)
+    if not best or len(best) != 64:
+        return st
+    known = {v[1]: int(h) for h, v in st["hdrs"].items()}
+    h, steps = best, 0
+    while h and h not in known and steps < 400:
+        hdr = rpc(cfg, "getblockheader", h, timeout=20)
+        if not isinstance(hdr, dict):
+            break
+        st["hdrs"][str(hdr["height"])] = [hdr["time"], h]
+        steps += 1
+        if hdr["time"] < now - BT_WINDOW - 3600:
+            break
+        h = hdr.get("previousblockhash")
+    # drop old / reorged-out entries
+    st["hdrs"] = {k: v for k, v in st["hdrs"].items() if v[0] >= now - BT_WINDOW - 3600}
+    top = sorted(st["hdrs"].items(), key=lambda kv: -int(kv[0]))[:3]
+    for hgt, (t, hsh) in top:
+        if hsh in st["tags"]:
+            continue
+        blk = rpc(cfg, "getblock", hsh, "2", timeout=40)
+        tag = None
+        try:
+            tag = coinbase_tag(blk["tx"][0]["vin"][0]["coinbase"])
+        except Exception:
+            pass
+        st["tags"][hsh] = tag or "unknown"
+    keep = {v[1] for v in st["hdrs"].values()}
+    st["tags"] = {k: v for k, v in st["tags"].items() if k in keep}
+    return st
+
+
 def refresh_nodes():
     """--node-only: one background refresh of every pool's node info into node.json."""
     import fcntl
@@ -660,6 +737,15 @@ def refresh_nodes():
                 near = min(pts, key=lambda p: abs(p[0] - b["time"]), default=None)
                 if near and abs(near[0] - b["time"]) < 6 * 3600:
                     have[str(b["height"])] = round(near[1], 2)
+    # network block times + recent winners (pools with "blocktimes")
+    btd = data.setdefault("_bt", {})
+    for key, cfg in POOLS.items():
+        if cfg.get("blocktimes"):
+            try:
+                block_times(key, cfg, btd, int(time.time()))
+            except Exception as e:
+                print(f"block times {key} failed: {e}", file=sys.stderr)
+
     # near misses + round effort from the sharelogs
     scan = read_json_retry(SCAN_FILE) or {}
     rounds = data.setdefault("_round", {})
@@ -782,6 +868,14 @@ def collect(key, cfg, history):
         if r:
             b["reward_sats"] = int(r["subsidy"]) + int(r["fees"] or 0)
             b["fees_known"] = r["fees"] is not None
+    btk = (nc.get("_bt") or {}).get(key)
+    if btk and btk.get("hdrs"):
+        ours = {b["height"] for b in blocks}
+        hs_ = sorted(((int(h), v[0], v[1]) for h, v in btk["hdrs"].items()), key=lambda x: x[0])
+        out["blocktimes"] = [[h, t] for h, t, _ in hs_ if t >= now - BT_WINDOW - 600]
+        out["recent_winners"] = [{"height": h, "time": t, "ours": h in ours,
+                                  "by": DEFAULT_RIG if h in ours else btk.get("tags", {}).get(hsh, "unknown")}
+                                 for h, t, hsh in sorted(hs_, key=lambda x: -x[0])[:3]]
     netd = (out.get("node") or {}).get("difficulty")
     if rd:
         out["round"] = {"start": rd.get("start"), "work": rd.get("work"),

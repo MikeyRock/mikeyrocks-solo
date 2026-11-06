@@ -299,6 +299,25 @@ button.glyph:hover{transform:scale(1.07)} button.glyph:active{transform:scale(.9
 .nm .pc em i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--cyan),var(--yel))}
 
 
+/* network block times */
+.btbox:empty{display:none}
+.btbox{margin-bottom:18px}
+.btread{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 14px;margin:2px 0 8px}
+.btread .big{font-family:Orbitron,"Arial Black",sans-serif;font-weight:900;font-size:22px}
+.btread .big.fast{color:var(--grn);text-shadow:0 0 10px #39ff8866} .btread .big.slow{color:#ff6b8a;text-shadow:0 0 10px #ff3b5c66}
+.btread .k{font-size:10px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase}
+.btread .d{font-size:11.5px;color:var(--dim)} .btread .d b{color:#fff}
+canvas.btc2{height:86px;margin:4px 0 6px;border-bottom:1px dashed var(--line)}
+.btleg{display:flex;gap:14px;font-size:10px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
+.btleg i{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px}
+.winners{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.win{border:1px solid var(--line);background:#070910;padding:9px 11px;min-width:0}
+.win .wh{font-size:10px;color:var(--dim);letter-spacing:.15em}
+.win .wb{font-weight:700;color:#fff;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.win .wt{font-size:10.5px;color:var(--dim);margin-top:2px}
+.win.ours{border-color:#f5ff3b99;background:#f5ff3b14;box-shadow:inset 0 0 14px #f5ff3b22}
+.win.ours .wb{color:var(--yel);text-shadow:0 0 8px #f5ff3b88}
+
 /* ===== phone layout ===== */
 .wrap{padding-top:max(28px, calc(env(safe-area-inset-top) + 12px));padding-left:max(20px, env(safe-area-inset-left));padding-right:max(20px, env(safe-area-inset-right));padding-bottom:max(60px, calc(env(safe-area-inset-bottom) + 24px))}
 table.wt td.meta{display:none}
@@ -352,6 +371,7 @@ table.st .s-meta{display:none}
   html::-webkit-scrollbar,body::-webkit-scrollbar,.hscroll::-webkit-scrollbar{display:none;width:0;height:0}
   table.ht.collapsed tr:nth-child(n+9){display:none}
   .history .more{display:block}
+  .winners{grid-template-columns:1fr 1fr 1fr;gap:6px} .win{padding:8px} .win .wb{font-size:12px} .win .tro{display:none}
   .near{padding:16px}
   .nm{grid-template-columns:28px minmax(0,1fr) auto;grid-template-areas:"rk rg sd" "rk pc pc" "rk dt dt";gap:3px 10px}
   .nm .rk{grid-area:rk} .nm .cn{display:none} .nm .cbm{display:inline} .nm .rg{grid-area:rg} .nm .sd{grid-area:sd} .nm .pc{grid-area:pc} .nm .dt{grid-area:dt;text-align:left}
@@ -482,6 +502,7 @@ table.st .s-meta{display:none}
       <div class="cell"><div class="k">Node sync</div><div class="v" data-f="sync"></div><div class="bar"><i data-f="syncBar"></i></div></div>
     </div>
 
+    <div class="btbox" data-f="bt"></div>
     <div class="sect">Workers</div>
     <div data-f="wtable"></div>
   </article>
@@ -585,7 +606,8 @@ function renderPool(key, p, now){
     ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td class="c-hr">${hs(w.hashrate5m??w.hashrate1m)}</td><td class="c-1h">${hs(w.hashrate1h)}</td><td class="c-best">${rigBest(w)}</td><td class="c-last on">${ago(w.lastshare)}</td><td class="meta">best <b>${rigBest(w)}</b> · 1h ${hs(w.hashrate1h)}</td></tr>`).join("")
   }</tbody></table>` : `<div class="empty">no rigs hashing right now</div>`;
   f("netline").innerHTML = netLine(p);
-  return [el, () => drawChart(f("chart"), p.history, color)];
+  f("bt").innerHTML = btHTML(p, now);
+  return [el, () => { drawChart(f("chart"), p.history, color); drawBT(f("bt").querySelector("canvas"), p, now); }];
 }
 const OFFLINE_SECS = 600;
 const isOn = (w,now) => !!w.lastshare && now - w.lastshare < OFFLINE_SECS;
@@ -773,6 +795,36 @@ function renderNear(pools){
 }
 document.querySelectorAll("#nearTabs button").forEach(b=>b.addEventListener("click",()=>{ nearCoin=b.dataset.c;
   document.querySelectorAll("#nearTabs button").forEach(x=>x.classList.toggle("on",x===b)); if(lastRender) renderNear(lastRender[0].pools||{}); }));
+
+
+/* ===== network block times + recent winners ===== */
+const mmss = s => { s=Math.max(0,Math.round(s)); const m=Math.floor(s/60); return m>=60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m ${String(s%60).padStart(2,"0")}s`; };
+function btHTML(p, now){
+  const bt=p.blocktimes; if(!bt || bt.length<3) return "";
+  const pts=bt.filter(x=>x[1]>=now-86400); if(pts.length<3) return "";
+  const avg=(pts[pts.length-1][1]-pts[0][1])/(pts.length-1), fast=avg<=600, pct=Math.abs(600-avg)/600*100;
+  const sinceLast=now-pts[pts.length-1][1];
+  const w=(p.recent_winners||[]).map(x=>`<div class="win${x.ours?" ours":""}"><div class="wh">#${num(x.height)}</div><div class="wb" title="${esc(x.by)}">${x.ours?'<span class="tro">🏆 </span>':""}${esc(x.by)}</div><div class="wt">${ago(x.time)}</div></div>`).join("");
+  return `<div class="sect">Network blocks</div>
+    <div class="btread"><div><div class="k">Avg block time · 24h</div><span class="big ${fast?"fast":"slow"}">${mmss(avg)}</span></div>
+      <div class="d"><b>${pts.length}</b> blocks · target 10m · <b style="color:${fast?"var(--grn)":"#ff6b8a"}">${pct.toFixed(0)}% ${fast?"faster":"slower"}</b><br>last block ${ago(pts[pts.length-1][1])}</div></div>
+    <canvas class="btc2"></canvas>
+    <div class="btleg"><span><i style="background:#39ff88"></i>under 10m</span><span><i style="background:#ff6b8a"></i>over 10m</span><span><i style="background:#f5ff3b"></i>your block</span></div>
+    ${w?`<div class="k" style="font-size:10px;color:var(--dim);letter-spacing:.2em;margin-bottom:6px">LAST 3 BLOCK WINNERS</div><div class="winners">${w}</div>`:""}`;
+}
+function drawBT(cv, p, now){
+  if(!cv) return; const bt=(p.blocktimes||[]).filter(x=>x[1]>=now-86400); if(bt.length<3) return;
+  const ours=new Set((p.blocks||[]).map(b=>b.height));
+  const dpr=devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight; cv.width=w*dpr; cv.height=h*dpr; const g=cv.getContext("2d"); g.scale(dpr,dpr);
+  const gaps=[]; for(let i=1;i<bt.length;i++) gaps.push({h:bt[i][0], s:Math.max(0,bt[i][1]-bt[i-1][1])});
+  const cap=Math.max(1800, Math.min(3600, Math.max(...gaps.map(x=>x.s))));
+  const bw=w/gaps.length, Y=v=>h-2-Math.min(v,cap)/cap*(h-14);
+  gaps.forEach((x,i)=>{ g.fillStyle= ours.has(x.h) ? "#f5ff3b" : x.s<=600 ? "#39ff88cc" : "#ff6b8acc";
+    if(ours.has(x.h)){ g.shadowColor="#f5ff3b"; g.shadowBlur=8; } else g.shadowBlur=0;
+    g.fillRect(i*bw+0.5, Y(x.s), Math.max(1,bw-1), h-2-Y(x.s)); });
+  g.shadowBlur=0; g.setLineDash([4,4]); g.strokeStyle="#ffffffaa"; g.beginPath(); g.moveTo(0,Y(600)); g.lineTo(w,Y(600)); g.stroke(); g.setLineDash([]);
+  g.fillStyle="#6f7ea3"; g.font="10px JetBrains Mono"; g.fillText("10m",4,Y(600)-4); g.fillText(mmss(cap)+(Math.max(...gaps.map(x=>x.s))>cap?"+":""),4,10); g.fillText("24h",w-28,h-6);
+}
 
 /* ===== live share log ===== */
 let shareCoin = "all", seenShares = new Set(), firstShares = true, sharesExpanded = false;
