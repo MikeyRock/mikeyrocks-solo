@@ -351,15 +351,9 @@ canvas.btc2{height:86px;margin:4px 0 6px;border-bottom:1px dashed var(--line)}
   .pool{min-height:0;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);column-gap:20px;padding:16px 18px}
   .pool > .ph{grid-column:1/-1;margin-bottom:8px}
   .pcol{display:flex;flex-direction:column;min-height:0}
-  .pc1{overflow:hidden}
+  .pc1{overflow:auto;scrollbar-width:none} .pc1::-webkit-scrollbar{display:none}
   .pc2 .grid{margin-bottom:12px}
-  .pc1 canvas[data-f="chart"]{flex:1 1 auto;min-height:140px;height:auto}
-  .pc2 .wbox{flex:0 0 auto;max-height:46%;overflow:auto;scrollbar-width:thin}
-  .pc2:not(:has(.btbox)) .wbox{flex:1 1 auto;max-height:none;min-height:0}
-  .pc1 .btbox{flex:0 0 auto;margin-top:6px}
-  .pc1 .btbox canvas.btc2{height:84px}
-  .pc2 .btbox{flex:1 1 0;display:flex;flex-direction:column;margin-top:14px;min-height:0;overflow:hidden}
-  .pc2 .btbox canvas.btc2{flex:1 1 auto;min-height:80px;height:auto}
+  .pc2 .wbox{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
   .wbox table thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
   .hero .big{font-size:46px} .reward{margin:8px 0 2px;padding:9px 12px} .effort{margin:8px 0 2px;padding:8px 12px}
   .netline{margin-top:8px}
@@ -661,7 +655,6 @@ function renderPool(key, p, now){
   }</tbody></table>` : `<div class="empty">no rigs hashing right now</div>`;
   f("netline").innerHTML = netLine(p);
   f("bt").innerHTML = btHTML(p, now);
-  if(BIG.matches && (p.workers||[]).filter(w=>isOn(w,now)).length <= 5) el.querySelector(".pc2").appendChild(f("bt"));
   return [el, () => { drawChart(f("chart"), p.history, color); drawBT(f("bt").querySelector("canvas"), p, now); }];
 }
 const OFFLINE_SECS = 600;
@@ -698,8 +691,6 @@ function coinMark(key){
     <path d="M20 42.5h24" stroke="${c}" stroke-width="1.6" stroke-linecap="round"/>
   </svg>`;
 }
-const BIG = matchMedia("(min-width:2300px) and (min-height:900px)");
-BIG.addEventListener?.("change", ()=>{ if(lastRender) render(...lastRender); });
 const effCls = e => e<=100 ? "lucky" : "unlucky";
 function rewardCell(b){
   if(b.reward_sats!=null && b.reward_sats<=1e6) b={...b, reward_sats:null};
