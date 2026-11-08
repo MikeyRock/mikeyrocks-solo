@@ -318,6 +318,20 @@ canvas.btc2{height:86px;margin:4px 0 6px;border-bottom:1px dashed var(--line)}
 .win.ours{border-color:#f5ff3b99;background:#f5ff3b14;box-shadow:inset 0 0 14px #f5ff3b22}
 .win.ours .wb{color:var(--yel);text-shadow:0 0 8px #f5ff3b88}
 
+/* ===== ultrawide (e.g. 3440×1440): 3 columns ===== */
+@media (min-width:2300px){
+  .wrap{max-width:min(3360px,97vw);display:grid;grid-template-columns:1fr 1fr 1.05fr;column-gap:24px;align-items:start}
+  .wrap > header,.wrap > .ticker,.wrap > .totals,.wrap > .lastblock,.wrap > .dock,.wrap > footer{grid-column:1/-1}
+  .wrap > .pools{grid-column:1/3;grid-row:span 3;align-self:start}
+  .wrap > .shares,.wrap > .near,.wrap > .history{grid-column:3;margin-top:0;margin-bottom:22px}
+  .wrap > .pools.single{grid-template-columns:1fr}
+  .sscroll{max-height:calc(52vh - 60px)}
+  .hscroll{max-height:calc(38vh - 40px)}
+  .totals{grid-template-columns:repeat(5,1fr)}
+  canvas{height:150px}
+  canvas.btc2{height:100px}
+}
+
 /* ===== phone layout ===== */
 .wrap{padding-top:max(28px, calc(env(safe-area-inset-top) + 12px));padding-left:max(20px, env(safe-area-inset-left));padding-right:max(20px, env(safe-area-inset-right));padding-bottom:max(60px, calc(env(safe-area-inset-bottom) + 24px))}
 table.wt td.meta{display:none}
