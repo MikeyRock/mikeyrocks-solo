@@ -318,18 +318,49 @@ canvas.btc2{height:86px;margin:4px 0 6px;border-bottom:1px dashed var(--line)}
 .win.ours{border-color:#f5ff3b99;background:#f5ff3b14;box-shadow:inset 0 0 14px #f5ff3b22}
 .win.ours .wb{color:var(--yel);text-shadow:0 0 8px #f5ff3b88}
 
-/* ===== ultrawide (e.g. 3440×1440): 3 columns ===== */
-@media (min-width:2300px){
-  .wrap{max-width:min(3360px,97vw);display:grid;grid-template-columns:1fr 1fr 1.05fr;column-gap:24px;align-items:start}
-  .wrap > header,.wrap > .ticker,.wrap > .totals,.wrap > .lastblock,.wrap > .dock,.wrap > footer{grid-column:1/-1}
-  .wrap > .pools{grid-column:1/3;grid-row:span 3;align-self:start}
-  .wrap > .shares,.wrap > .near,.wrap > .history{grid-column:3;margin-top:0;margin-bottom:22px}
-  .wrap > .pools.single{grid-template-columns:1fr}
-  .sscroll{max-height:calc(52vh - 60px)}
-  .hscroll{max-height:calc(38vh - 40px)}
-  .totals{grid-template-columns:repeat(5,1fr)}
-  canvas{height:150px}
-  canvas.btc2{height:100px}
+/* ===== big screens (e.g. 3440×1440): fixed dashboard that fits the window, no page scroll ===== */
+.pcol{display:contents}
+@media (min-width:2300px) and (min-height:900px){
+  html,body{height:100%;overflow:hidden}
+  .wrap{max-width:min(3360px,98vw);height:100vh;box-sizing:border-box;padding:14px 18px 14px;
+    display:grid;grid-template-columns:1fr 1fr 1.05fr;column-gap:18px;row-gap:12px;
+    grid-template-rows:auto auto auto auto auto minmax(0,1.35fr) minmax(0,.8fr) minmax(0,1fr)}
+  .wrap > header{grid-row:1;grid-column:1/-1;margin:0}
+  .wrap > .ticker{grid-row:2;grid-column:1/-1;margin:0}
+  .wrap > .totals{grid-row:3;grid-column:1/3;margin:0}
+  .wrap > .lastblock{grid-row:3;grid-column:3;margin:0}
+  .wrap > .dock{grid-row:4;grid-column:1/-1;margin:0}
+  .wrap > .pools{grid-row:6/9;grid-column:1/3;min-height:0;height:100%}
+  .wrap > .shares{grid-row:6;grid-column:3} .wrap > .near{grid-row:7;grid-column:3} .wrap > .history{grid-row:8;grid-column:3}
+  .wrap > footer{display:none}
+  /* compact top band */
+  .avatar{width:64px;height:64px} .brand{font-size:44px} .sub{margin-top:6px}
+  .ticker div{padding:6px 0}
+  .totals{grid-template-columns:repeat(5,1fr);gap:10px}
+  .tot{padding:10px 14px} .tot .v{font-size:22px;margin-top:4px}
+  .lastblock{padding:10px 16px;gap:6px 18px;align-content:center;clip-path:none}
+  .lastblock .trophy{font-size:24px} .lb-main{font-size:22px} .lb-f .v{font-size:13px}
+  /* right column: each section fills its row and scrolls inside */
+  .shares,.near,.history{margin:0;display:flex;flex-direction:column;min-height:0;padding:14px 16px}
+  .shares .top,.near .top{margin-bottom:8px} .history h2{margin-bottom:8px}
+  .sscroll,#nearlist,.hscroll{flex:1;min-height:0;max-height:none;overflow:auto;scrollbar-width:thin}
+  #nearlist{scrollbar-color:var(--yel) #0b0e17}
+  .shares .note,.near .note{margin-top:6px}
+  /* pools: two columns inside each panel */
+  .pools{gap:18px}
+  .pool{min-height:0;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);column-gap:20px;padding:16px 18px}
+  .pool > .ph{grid-column:1/-1;margin-bottom:8px}
+  .pcol{display:flex;flex-direction:column;min-height:0}
+  .pc1{overflow:auto;scrollbar-width:none} .pc1::-webkit-scrollbar{display:none}
+  .pc2 .grid{margin-bottom:12px}
+  .pc2 .wbox{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
+  .wbox table thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
+  .hero .big{font-size:46px} .reward{margin:8px 0 2px;padding:9px 12px} .effort{margin:8px 0 2px;padding:8px 12px}
+  .netline{margin-top:8px}
+  canvas{height:120px;margin:8px 0 10px}
+  canvas.btc2{height:80px}
+  .btbox{margin-bottom:0}
+  .cell{padding:9px 12px} .cell .v{font-size:15px}
 }
 
 /* ===== phone layout ===== */
@@ -489,13 +520,16 @@ table.st .s-meta{display:none}
       </div>
       <div class="tag" data-f="tag"></div>
     </div>
+    <div class="pcol pc1">
     <div class="hero-k">Pool hashrate · 5m</div>
     <div class="hero"><span class="big" data-f="hr"></span><span class="unit" data-f="hrU"></span></div>
     <div class="reward" data-f="reward"></div>
     <div class="effort" data-f="effort"></div>
     <div class="netline" data-f="netline"></div>
     <canvas data-f="chart"></canvas>
-
+    <div class="btbox" data-f="bt"></div>
+    </div>
+    <div class="pcol pc2">
     <div class="sect">Pool</div>
     <div class="grid">
       <div class="cell"><div class="k">1h avg</div><div class="v" data-f="hr1h"></div></div>
@@ -516,9 +550,9 @@ table.st .s-meta{display:none}
       <div class="cell"><div class="k">Node sync</div><div class="v" data-f="sync"></div><div class="bar"><i data-f="syncBar"></i></div></div>
     </div>
 
-    <div class="btbox" data-f="bt"></div>
     <div class="sect">Workers</div>
-    <div data-f="wtable"></div>
+    <div class="wbox" data-f="wtable"></div>
+    </div>
   </article>
 </template>
 
