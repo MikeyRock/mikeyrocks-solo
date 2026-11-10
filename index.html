@@ -320,7 +320,11 @@ canvas.btc2{height:86px;margin:4px 0 6px;border-bottom:1px dashed var(--line)}
 
 /* ===== big screens (e.g. 3440×1440): fixed dashboard that fits the window, no page scroll ===== */
 .pcol{display:contents}
-.pshares{display:none}
+.pshares{display:block;margin-top:18px}
+.pscroll{max-height:380px;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--c) #0b0e17}
+.pscroll thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
+table.pst th:nth-child(2),table.pst td.s-rig{text-align:center}
+.wrap > .shares{display:none}
 @media (min-width:2300px) and (min-height:900px){
   html,body{height:100%;overflow:hidden}
   .wrap{max-width:min(3360px,98vw);height:100vh;box-sizing:border-box;padding:14px 18px 14px;
@@ -437,6 +441,7 @@ table.st .s-meta{display:none}
   table.st .s-luck,table.st .s-net,table.st .s-dev{display:none}
   table.st .s-meta{display:block;grid-area:meta;font-size:11px;color:var(--dim);white-space:normal}
   table.st.collapsed tbody tr:nth-child(n+16){display:none}
+  .pscroll{max-height:460px} table.pst td.s-rig{text-align:left}
   .shares .more{display:block}
 }
 .more{display:none;width:100%;margin-top:12px;padding:10px;background:#0006;border:1px solid #ff2bd666;color:#ffd0f4;
@@ -661,7 +666,7 @@ function renderPool(key, p, now){
     ws.map(w=>`<tr><td class="wname">${esc(w.name)}</td><td class="c-hr">${hs(w.hashrate5m??w.hashrate1m)}</td><td class="c-1h">${hs(w.hashrate1h)}</td><td class="c-best">${rigBest(w)}</td><td class="c-last on">${ago(w.lastshare)}</td><td class="meta">best <b>${rigBest(w)}</b> · 1h ${hs(w.hashrate1h)}</td></tr>`).join("")
   }</tbody></table>` : `<div class="empty">no rigs hashing right now</div>`;
   f("netline").innerHTML = netLine(p);
-  f("pshares").innerHTML = BIG.matches ? poolSharesHTML(key, p) : "";
+  f("pshares").innerHTML = poolSharesHTML(key, p);
   f("bt").innerHTML = btHTML(p, now);
   return [el, () => { drawChart(f("chart"), p.history, color); drawBT(f("bt").querySelector("canvas"), p, now); }];
 }
@@ -709,7 +714,8 @@ function poolSharesHTML(key, p){
     const luck=x.diff?x.sdiff/x.diff:null, lc=luck>=10?"mega":luck>=3?"hi":"", blk=nd&&x.sdiff>=nd;
     return `<tr class="${isNew?"fresh":""}${blk?" blkrow":""}"><td class="s-time">${fmtTime(x.t)}</td><td class="s-rig">${esc(x.rig)}</td>
       <td class="s-diff">${blk?'<span class="gem">💎</span>':""}${sh(x.sdiff)}</td><td class="s-luck"><span class="lk ${lc}">${luck?luck.toFixed(1)+"×":"—"}</span></td>
-      <td class="s-net">${nd?netPct(x.sdiff/nd*100):"—"}</td><td class="s-dev">${esc(x.dev||"—")}</td></tr>`; }).join("");
+      <td class="s-net">${nd?netPct(x.sdiff/nd*100):"—"}</td><td class="s-dev">${esc(x.dev||"—")}</td>
+      <td class="s-meta">${fmtTime(x.t)} · <span class="lk ${lc}">${luck?luck.toFixed(1)+"×":""}</span> · ${nd?netPct(x.sdiff/nd*100):"—"} · ${esc(x.dev||"")}</td></tr>`; }).join("");
   return `<div class="sect">Live share log</div><div class="pscroll"><table class="st pst"><thead><tr><th>Time</th><th>Rig</th><th>Share diff</th><th>Luck</th><th>Net %</th><th>Device</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 const effCls = e => e<=100 ? "lucky" : "unlucky";
@@ -767,7 +773,7 @@ function render(d, demo){
   box.classList.toggle("single", box.children.length===1); box.hidden = box.children.length===0;
   draws.forEach(f=>f());
   renderBlocks(pools);
-  renderShares(pools); if(BIG.matches) firstP=false;
+  renderShares(pools); firstP=false;
   renderNear(pools);
   if(!demo) checkCelebration(pools);
   const [hv,hu]=si(tH); $("#tHash").innerHTML=`${hv}<small>${hu}H/s</small>`;
