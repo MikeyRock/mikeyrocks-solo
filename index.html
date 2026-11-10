@@ -327,6 +327,11 @@ table.pst th:nth-child(2),table.pst td.s-rig{text-align:center}
 table.pst th:nth-child(3){text-align:right}
 table.pst{table-layout:fixed;width:100%} table.pst td,table.pst th{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pscroll{scrollbar-gutter:stable}
+table.pst th,table.pst td{padding-left:5px;padding-right:5px} table.pst th{letter-spacing:.1em}
+/* workers: same fixed height in both pools (8 rows), scroll when more */
+.wbox{height:calc(30px + 8 * 35px);overflow-y:auto;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:var(--c) #0b0e17}
+.wbox table.wt tbody tr{height:35px}
+.wbox table.wt thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
 .wrap > .shares{display:none}
 @media (min-width:2300px) and (min-height:900px){
   html,body{height:100%;overflow:hidden}
@@ -366,7 +371,8 @@ table.pst{table-layout:fixed;width:100%} table.pst td,table.pst th{overflow:hidd
   .pscroll thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
   table.pst th:nth-child(2),table.pst td.s-rig{text-align:center}
   table.pst td{padding:5px 8px;font-size:12px}
-  .pc2 .wbox{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
+  .pc2 .wbox{flex:none;height:calc(26px + 8 * 30px);overflow-y:auto}
+  .pc2 .wbox table.wt tbody tr{height:30px}
   .wbox table thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
   .hero .big{font-size:46px} .reward{margin:8px 0 2px;padding:9px 12px} .effort{margin:8px 0 2px;padding:8px 12px}
   .netline{margin-top:8px}
@@ -445,6 +451,7 @@ table.st .s-meta{display:none}
   table.st .s-meta{display:block;grid-area:meta;font-size:11px;color:var(--dim);white-space:normal}
   table.st.collapsed tbody tr:nth-child(n+16){display:none}
   .pscroll{max-height:460px} table.pst td.s-rig{text-align:left}
+  .wbox{height:auto;max-height:calc(8 * 56px)} .wbox table.wt tbody tr{height:auto}
   .shares .more{display:block}
 }
 .more{display:none;width:100%;margin-top:12px;padding:10px;background:#0006;border:1px solid #ff2bd666;color:#ffd0f4;
@@ -719,7 +726,7 @@ function poolSharesHTML(key, p){
       <td class="s-diff">${blk?'<span class="gem">💎</span>':""}${sh(x.sdiff)}</td><td class="s-luck"><span class="lk ${lc}">${luck?luck.toFixed(1)+"×":"—"}</span></td>
       <td class="s-net">${nd?netPct(x.sdiff/nd*100):"—"}</td><td class="s-dev">${esc(x.dev||"—")}</td>
       <td class="s-meta">${fmtTime(x.t)} · <span class="lk ${lc}">${luck?luck.toFixed(1)+"×":""}</span> · ${nd?netPct(x.sdiff/nd*100):"—"} · ${esc(x.dev||"")}</td></tr>`; }).join("");
-  return `<div class="sect">Live share log</div><div class="pscroll"><table class="st pst"><colgroup><col style="width:19%"><col style="width:17%"><col style="width:16%"><col style="width:12%"><col style="width:16%"><col style="width:20%"></colgroup><thead><tr><th>Time</th><th>Rig</th><th>Share diff</th><th>Luck</th><th>Net %</th><th>Device</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="sect">Live share log</div><div class="pscroll"><table class="st pst"><colgroup><col style="width:20%"><col style="width:16%"><col style="width:18%"><col style="width:12%"><col style="width:15%"><col style="width:19%"></colgroup><thead><tr><th>Time</th><th>Rig</th><th>Share diff</th><th>Luck</th><th>Net %</th><th>Device</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 const effCls = e => e<=100 ? "lucky" : "unlucky";
 function rewardCell(b){
