@@ -325,6 +325,8 @@ canvas.btc2{height:86px;margin:4px 0 6px;border-bottom:1px dashed var(--line)}
 .pscroll thead th{position:sticky;top:0;background:#0b0e17;z-index:1}
 table.pst th:nth-child(2),table.pst td.s-rig{text-align:center}
 table.pst th:nth-child(3){text-align:right}
+table.pst{table-layout:fixed;width:100%} table.pst td,table.pst th{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pscroll{scrollbar-gutter:stable}
 .wrap > .shares{display:none}
 @media (min-width:2300px) and (min-height:900px){
   html,body{height:100%;overflow:hidden}
@@ -717,7 +719,7 @@ function poolSharesHTML(key, p){
       <td class="s-diff">${blk?'<span class="gem">💎</span>':""}${sh(x.sdiff)}</td><td class="s-luck"><span class="lk ${lc}">${luck?luck.toFixed(1)+"×":"—"}</span></td>
       <td class="s-net">${nd?netPct(x.sdiff/nd*100):"—"}</td><td class="s-dev">${esc(x.dev||"—")}</td>
       <td class="s-meta">${fmtTime(x.t)} · <span class="lk ${lc}">${luck?luck.toFixed(1)+"×":""}</span> · ${nd?netPct(x.sdiff/nd*100):"—"} · ${esc(x.dev||"")}</td></tr>`; }).join("");
-  return `<div class="sect">Live share log</div><div class="pscroll"><table class="st pst"><thead><tr><th>Time</th><th>Rig</th><th>Share diff</th><th>Luck</th><th>Net %</th><th>Device</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  return `<div class="sect">Live share log</div><div class="pscroll"><table class="st pst"><colgroup><col style="width:19%"><col style="width:17%"><col style="width:16%"><col style="width:12%"><col style="width:16%"><col style="width:20%"></colgroup><thead><tr><th>Time</th><th>Rig</th><th>Share diff</th><th>Luck</th><th>Net %</th><th>Device</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 const effCls = e => e<=100 ? "lucky" : "unlucky";
 function rewardCell(b){
