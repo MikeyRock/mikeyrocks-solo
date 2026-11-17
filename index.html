@@ -110,6 +110,7 @@ canvas{width:100%;height:120px;display:block;margin:14px 0 18px;border-bottom:1p
 .cell .k{font-size:10px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase}
 .cell .v{font-size:17px;font-weight:600;color:#fff;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cell .v.c{color:var(--c)}
+.bsb{color:var(--yel);text-shadow:0 0 8px #f5ff3b66}
 
 .sect{font-family:Orbitron,"Arial Black",sans-serif;font-size:12px;letter-spacing:.3em;color:var(--c);text-transform:uppercase;margin:6px 0 10px;display:flex;align-items:center;gap:10px}
 .sect::after{content:"";flex:1;height:2px;min-height:2px;opacity:.75;background:linear-gradient(90deg,var(--c),transparent)}
@@ -657,7 +658,7 @@ function renderPool(key, p, now){
   f("effort").innerHTML = effortHTML(p, now); f("effort").hidden = !p.round || p.round.effort==null;
   f("hr1h").textContent=hs(hr["1h"]); f("hr1d").textContent=hs(hr["1d"]);
   f("workers").textContent=num((p.workers||[]).filter(w=>isOn(w,now)).length);
-  if(pool.bestshare>0) f("best").innerHTML=`${sh(pool.bestshare)}${pool.bestshare_rig?` <span style="font-size:11px;color:var(--dim);font-weight:400">by ${esc(pool.bestshare_rig)}</span>`:""}`;
+  if(pool.bestshare>0) f("best").innerHTML=`<span class="bsb">${sh(pool.bestshare)}</span>${pool.bestshare_rig?` <span style="font-size:11px;color:var(--dim);font-weight:400">by ${esc(pool.bestshare_rig)}</span>`:""}`;
   else f("best").innerHTML='— <span style="font-size:11px;color:var(--dim);font-weight:400">no shares this round</span>'; f("bestever").textContent=sh(pool.bestever);
   f("payout").textContent=p.payout||"—";
   f("height").textContent=num(node.blocks);
