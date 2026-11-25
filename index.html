@@ -179,6 +179,7 @@ table.ht td.h-rw sup{color:var(--dim);font-size:9px;margin-left:1px} .dimx{color
 .bell{display:flex;align-items:center;gap:10px;background:#0008;border:1px solid #ff2bd666;color:#ffd0f4;font:600 11px "JetBrains Mono",monospace;
   letter-spacing:.15em;text-transform:uppercase;padding:7px 12px;cursor:pointer;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px)}
 .bell:hover{box-shadow:inset 0 0 14px #ff2bd633}
+.sndbtn{border-color:#00f0ff66;color:#bff8ff}
 .bell .sw{width:30px;height:16px;border-radius:9px;background:#1c2336;position:relative;transition:.2s}
 .bell .sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#6f7ea3;transition:.2s}
 .bell.on{border-color:#39ff8888;color:var(--grn)}
@@ -483,6 +484,7 @@ table.st .s-meta{display:none}
           <label class="arow"><span><b>📴 Rig offline</b><small>no shares for 10 min · and back online</small></span><input type="checkbox" data-pref="offline"><i class="sw"></i></label>
         </div>
       </div>
+      <button class="bell sndbtn" id="sndBtn" type="button"><span id="sndTxt">🔇 Sound off</span><span class="sw"></span></button>
       <div id="live" class="pill"><span class="dot"></span><span id="liveTxt">CONNECTING…</span></div>
       <div class="muted" id="updated">—</div>
     </div>
@@ -954,6 +956,32 @@ document.querySelectorAll("#shareTabs button").forEach(b=>b.addEventListener("cl
   if(lastRender) renderShares(lastRender[0].pools||{}); }));
 
 
+
+/* ===== winning sound (synthesized, no files) ===== */
+let AC=null, soundOn=(()=>{ try{ return localStorage.getItem("blockSound")!=="0"; }catch(e){ return true; } })(), pendingSound=false;
+function ac(){ if(!AC){ const C=window.AudioContext||window.webkitAudioContext; if(C) AC=new C(); } return AC; }
+function showSound(){ const b=$("#sndBtn"); b.classList.toggle("on",soundOn); $("#sndTxt").textContent = soundOn ? "🔊 Sound on" : "🔇 Sound off"; }
+function tone(ctx, f, t0, dur, type="square", vol=.18){
+  const o=ctx.createOscillator(), g=ctx.createGain(); o.type=type; o.frequency.setValueAtTime(f,t0);
+  g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(vol,t0+.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  o.connect(g).connect(ctx.destination); o.start(t0); o.stop(t0+dur+.05);
+}
+function playFanfare(){
+  const ctx=ac(); if(!ctx||!soundOn) return;
+  if(ctx.state!=="running"){ pendingSound=true; ctx.resume().catch(()=>{}); return; }
+  pendingSound=false;
+  const t=ctx.currentTime+.05, n=[523.25,659.25,783.99,1046.5];          // C5 E5 G5 C6
+  n.forEach((f,i)=>tone(ctx,f,t+i*.12,.22,"square",.12));
+  [1046.5,1318.5,1568].forEach(f=>tone(ctx,f,t+.55,1.4,"triangle",.16)); // bright C major chord
+  [523.25,783.99].forEach(f=>tone(ctx,f,t+.55,1.4,"sawtooth",.05));
+  tone(ctx,2093,t+1.1,.5,"sine",.08); tone(ctx,2637,t+1.25,.6,"sine",.07); // sparkle
+}
+// first click/tap unlocks audio and plays anything waiting
+["pointerdown","keydown"].forEach(ev=>addEventListener(ev,()=>{ const c=ac(); if(c&&c.state!=="running") c.resume().then(()=>{ if(pendingSound) playFanfare(); }); else if(pendingSound) playFanfare(); },{passive:true}));
+$("#sndBtn").addEventListener("click",()=>{ soundOn=!soundOn; try{ localStorage.setItem("blockSound",soundOn?"1":"0"); }catch(e){} showSound();
+  if(soundOn){ const c=ac(); c&&c.resume().then(playFanfare); } });
+showSound();
+
 /* ===== BLOCK FOUND celebration ===== */
 const CELEBRATE_HOURS = 24;          // celebrate blocks found in the last 24h until cleared
 let partyKey=null, confettiRAF=null;
@@ -977,7 +1005,7 @@ function startParty(b, key){
   $("#partyBig").innerHTML=`<span>${C}</span> BLOCK FOUND!`;
   const px=PRICES[b.coin], rw=b.reward;
   $("#partyDet").innerHTML=`BLOCK <b>#${num(b.height)}</b> · RIG <b>${esc(rigOf(b.rig))}</b>${rw?` · <b>${coinAmt(rw.total_sats)} ${C}</b>${px?` (≈ ${usd(rw.total_sats/1e8*px)})`:""}`:""}<br>${fmtDate(b.time)}`;
-  el.classList.add("on"); runConfetti(col);
+  el.classList.add("on"); runConfetti(col); playFanfare();
 }
 function stopParty(){
   $("#party").classList.remove("on"); cancelAnimationFrame(confettiRAF); confettiRAF=null;
